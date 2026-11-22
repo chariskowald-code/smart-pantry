@@ -532,7 +532,7 @@
 
         <div>
           <label class="text-[11px] font-bold text-slate-500">Produktname</label>
-          <input id="pm-name" type="text" placeholder="z. B. Bio Magerquark" class="w-full mt-1 px-3.5 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-bold" />
+          <input id="pm-name" type="text" onchange="suggestPantryPortion()" placeholder="z. B. Bio Magerquark" class="w-full mt-1 px-3.5 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-bold" />
         </div>
 
         <div class="grid grid-cols-3 gap-2">
@@ -779,6 +779,7 @@
           <button onclick="saveGeminiKey()" class="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">Speichern</button>
         </div>
         <p class="text-[11px] text-slate-500">Ohne API-Key nutzt die App automatisch die eingebaute Schweizer Nährwertdatenbank (1.246 Produkte) + Open Food Facts.</p>
+        <p class="text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2">Sicherheitshinweis: Diese GitHub-Pages-App läuft vollständig im Browser. Der API-Schlüssel wird lokal auf diesem Gerät gespeichert und ist für technisch versierte Besucher der Website grundsätzlich nicht geheim. Er wird nicht mehr in JSON-Backups exportiert oder aus importierten Backups übernommen. Für echten Schutz ist später ein kleiner Server-Proxy mit geheimem Schlüssel nötig.</p>
       </div>
 
       <div class="border-t border-[#EFECE6] pt-3 space-y-2">
@@ -877,7 +878,7 @@ function loadAllState() {
         customProducts: Array.isArray(parsed.customProducts) ? parsed.customProducts : [],
         collapsedStorage: parsed.collapsedStorage || {},
         expandedPantryItems: parsed.expandedPantryItems || {},
-        geminiApiKey: parsed.geminiApiKey || ''
+        geminiApiKey: parsed.geminiApiKey || state.geminiApiKey || ''
       };
     } else {
       state = def;
@@ -956,6 +957,40 @@ function inferMacroCategory(name, kcal, protein, carbs, fat, dbCat = '') {
   if (fKcal / total >= 0.55 && fat >= 12) return 'Fettquelle';
   if (cKcal / total >= 0.55 && carbs >= 15) return 'Kohlenhydratquelle';
   return 'Ausgewogen / Mischprodukt';
+}
+
+// Durchschnittliche Portions-/Stückgewichte (Richtwerte, jederzeit manuell änderbar).
+// Die Werte sind praktische Näherungen, keine amtlichen oder individuellen Portionsvorgaben.
+const COMMON_PORTION_GRAMS = [
+  [/ei|eier/, 60], [/banane/, 120], [/apfel|birne|orange|kiwi|pfirsich|nektarine/, 150],
+  [/avocado/, 150], [/tomate/, 120], [/kartoffel/, 170], [/karotte|rüebli/, 80],
+  [/zwiebel/, 80], [/knoblauchzehe/, 5], [/brotscheibe|toast|brot/, 40],
+  [/brötchen|semmel|weckerl/, 60], [/joghurt|skyr|quark|topfen/, 150],
+  [/milch|drink|saft/, 200], [/käse|emmentaler|mozzarella/, 30],
+  [/reis|nudeln|pasta|spaghetti/, 80], [/haferflocken|müsli/, 50],
+  [/mehl/, 30], [/butter/, 10], [/olivenöl|öl/, 10], [/erdnussbutter|nussmus/, 15],
+  [/erdbeere|himbeere|heidelbeere|beeren/, 100], [/gurke/, 100],
+  [/paprika|peperoni/, 150], [/champignon|pilz/, 20], [/tofu/, 125]
+];
+function getSuggestedPortionGrams(name, fallback = 100) {
+  const text = String(name || '').toLocaleLowerCase('de');
+  for (const [pattern, grams] of COMMON_PORTION_GRAMS) if (pattern.test(text)) return grams;
+  return fallback;
+}
+function convertRecipeQuantityToGrams(name, amount, unit) {
+  const n = Number(amount);
+  const u = String(unit || '').toLowerCase().replace(/ä/g,'ae');
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (/^(g|gramm|ml|milliliter)$/.test(u)) return n;
+  if (/^(kg|kilogramm)$/.test(u)) return n * 1000;
+  if (/^(l|liter)$/.test(u)) return n * 1000;
+  if (/^(stück|stk\.?|stk|ei|eier)$/.test(u)) return n * getSuggestedPortionGrams(name);
+  if (/^(el|essloeffel|esslöffel)$/.test(u)) return n * (/öl|honig|sirup/.test(String(name).toLowerCase()) ? 15 : 12);
+  if (/^(tl|teeloeffel|teelöffel)$/.test(u)) return n * (/öl|honig|sirup/.test(String(name).toLowerCase()) ? 5 : 4);
+  if (/^(prise|prisen)$/.test(u)) return n * 0.5;
+  if (/^(scheibe|scheiben)$/.test(u)) return n * getSuggestedPortionGrams(name, /brot|toast/i.test(name) ? 40 : 30);
+  if (/^(packung|becher|glas|dose)$/.test(u)) return n * getSuggestedPortionGrams(name, 150);
+  return null;
 }
 
 function migratePantryItem(item) {
@@ -1413,7 +1448,7 @@ function onDiarySearchInput(val) {
       carbs: ch.carbs,
       fat: ch.fat,
       defaultUnit: 'g',
-      portionG: 100
+      portionG: getSuggestedPortionGrams(ch.name, 100)
     });
   });
 
@@ -1810,7 +1845,7 @@ function openAddPantryModal() {
   document.getElementById('pm-name').value = '';
   document.getElementById('pm-amount').value = '500';
   document.getElementById('pm-unit').value = 'g';
-  document.getElementById('pm-portion-g').value = '100';
+  document.getElementById('pm-portion-g').value = String(getSuggestedPortionGrams(document.getElementById('pm-name').value, 100));
   document.getElementById('pm-storage').value = 'Vorratsschrank & Konserven';
   document.getElementById('pm-macro-cat').value = 'AUTO';
   document.getElementById('pm-kcal').value = '0';
@@ -1830,7 +1865,7 @@ function openEditPantryModal(id) {
   document.getElementById('pm-name').value = item.name;
   document.getElementById('pm-amount').value = item.amount;
   document.getElementById('pm-unit').value = item.unit;
-  document.getElementById('pm-portion-g').value = item.portionG || 100;
+  document.getElementById('pm-portion-g').value = item.portionG || getSuggestedPortionGrams(item.name, 100);
   document.getElementById('pm-storage').value = item.storage || 'Vorratsschrank & Konserven';
   document.getElementById('pm-macro-cat').value = item.macroCategory || 'AUTO';
   document.getElementById('pm-kcal').value = item.kcal;
@@ -1842,6 +1877,12 @@ function openEditPantryModal(id) {
 
 function closePantryItemModal() {
   document.getElementById('pantry-item-modal').classList.add('hidden');
+}
+
+function suggestPantryPortion() {
+  const name = document.getElementById('pm-name').value.trim();
+  if (!name) return;
+  document.getElementById('pm-portion-g').value = String(getSuggestedPortionGrams(name, 100));
 }
 
 let pmLookupList = [];
@@ -1875,6 +1916,7 @@ function applyPantryLookup(idx) {
   document.getElementById('pm-carbs').value = m.carbs;
   document.getElementById('pm-fat').value = m.fat;
   document.getElementById('pm-storage').value = inferStorageLocation(m.name, m.category);
+  document.getElementById('pm-portion-g').value = String(getSuggestedPortionGrams(m.name, 100));
   document.getElementById('pm-lookup-results').classList.add('hidden');
 }
 
@@ -2109,7 +2151,7 @@ Antworte ausschließlich als JSON-Array:
             name: item.name || 'Artikel',
             amount: Number(item.amount) || 100,
             unit: item.unit || 'g',
-            portionG: 100,
+            portionG: getSuggestedPortionGrams(i.name || 'Artikel', 100),
             kcal,
             protein,
             carbs,
@@ -2888,11 +2930,12 @@ Antworte ausschließlich mit einem JSON-Objekt in diesem Format:
         const ref = findReferenceNutrition(i.name || '');
         const amount = Number(i.amount);
         const unit = String(i.unit || 'g');
-        const isWeight = /^(g|gramm|ml|milliliter)$/i.test(unit);
-        // The existing nutrition model is gram-based. Preserve non-weight quantities
-        // verbatim in the ingredient name instead of incorrectly treating e.g. 2 eggs as 2 g.
-        const grams = isWeight && Number.isFinite(amount) && amount > 0 ? amount : 100;
-        const quantityLabel = !isWeight && Number.isFinite(amount) && amount > 0 ? ` – ${amount} ${unit}` : '';
+        const convertedGrams = convertRecipeQuantityToGrams(i.name || '', amount, unit);
+        // Convert common kitchen units with transparent average weights; retain the
+        // original amount in the label so the user can verify or correct it.
+        const grams = convertedGrams || getSuggestedPortionGrams(i.name || '', 100);
+        const isWeight = /^(g|gramm|ml|milliliter|kg|kilogramm|l|liter)$/i.test(unit);
+        const quantityLabel = !isWeight && Number.isFinite(amount) && amount > 0 ? ` – ${amount} ${unit} (ca. ${Math.round(grams)} g)` : '';
         return {
           name: `${i.name || 'Zutat'}${quantityLabel}`,
           grams,
@@ -2926,7 +2969,7 @@ Antworte ausschließlich als JSON-Array:
             name: i.name || 'Artikel',
             amount: Number(i.amount) || 100,
             unit: i.unit || 'g',
-            portionG: 100,
+            portionG: getSuggestedPortionGrams(i.name || 'Artikel', 100),
             kcal,
             protein,
             carbs,
@@ -3007,12 +3050,14 @@ async function callGeminiJson(promptText, imageBase64 = null) {
   const apiKey = (state.geminiApiKey || '').trim();
   if (!apiKey) throw new Error('NO_KEY');
 
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const model = 'gemini-3.8-flash';
   const parts = [{ text: promptText }];
   if (imageBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageBase64 } });
-
+  const retryableStatuses = [408, 429, 500, 502, 503, 504];
+  const maxAttempts = 4;
   let lastError = 'Die Gemini-API hat keine verwertbare Antwort geliefert.';
-  for (const model of models) {
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
       const res = await fetch(url, {
@@ -3023,32 +3068,34 @@ async function callGeminiJson(promptText, imageBase64 = null) {
           generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
         })
       });
-
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const apiMessage = data?.error?.message || `HTTP ${res.status}`;
-        lastError = `Google Gemini (${model}): ${apiMessage}`;
-        // Try the fallback model for unavailable models or temporary server errors.
-        if ([400, 401, 403, 404, 429, 500, 503].includes(res.status)) continue;
-        throw new Error(lastError);
-      }
-
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (!rawText) {
-        const blockReason = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason;
-        lastError = blockReason ? `Gemini hat die Anfrage nicht verarbeitet (${blockReason}).` : 'Gemini hat keinen lesbaren Text zurückgegeben.';
-        continue;
-      }
-      const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-      try {
-        return JSON.parse(cleaned);
-      } catch (parseError) {
-        lastError = 'Die KI-Antwort war kein gültiges JSON. Bitte Foto erneut versuchen.';
+        lastError = `Google Gemini (${model}, HTTP ${res.status}): ${apiMessage}`;
+        if (!retryableStatuses.includes(res.status) || attempt === maxAttempts) throw new Error(lastError);
+      } else {
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!rawText) {
+          const blockReason = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason;
+          throw new Error(blockReason ? `Gemini hat die Anfrage nicht verarbeitet (${blockReason}).` : 'Gemini hat keinen lesbaren Text zurückgegeben.');
+        }
+        const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        try { return JSON.parse(cleaned); }
+        catch { throw new Error('Die KI-Antwort war kein gültiges JSON. Bitte erneut versuchen.'); }
       }
     } catch (e) {
-      if (e instanceof TypeError) lastError = 'Netzwerkfehler: Die Gemini-API ist nicht erreichbar. Internetverbindung oder Browser-Verbindung prüfen.';
-      else if (e?.message) lastError = e.message;
+      if (e instanceof TypeError) {
+        lastError = 'Netzwerkfehler: Die Gemini-API ist nicht erreichbar. Internetverbindung oder Browser-Verbindung prüfen.';
+        if (attempt === maxAttempts) throw new Error(lastError);
+      } else {
+        lastError = e?.message || String(e);
+        // Only retry transient server/traffic errors, never credentials or invalid requests.
+        if (!retryableStatuses.some(code => lastError.includes(`HTTP ${code}`)) || attempt === maxAttempts) throw new Error(lastError);
+      }
     }
+    const waitMs = Math.min(1000 * (2 ** (attempt - 1)), 8000) + Math.floor(Math.random() * 300);
+    console.warn(`Gemini vorübergehend nicht verfügbar. Neuer Versuch ${attempt + 1}/${maxAttempts} in ${waitMs} ms.`);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
   }
   throw new Error(lastError);
 }
@@ -3096,7 +3143,8 @@ function saveGeminiKey() {
 }
 
 function exportBackupJson() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const backupData = { ...state, geminiApiKey: '' };
+  const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -3113,6 +3161,8 @@ function importBackupJson(event) {
   reader.onload = (e) => {
     try {
       const parsed = JSON.parse(e.target.result);
+      // Imported backups must never replace the API key stored on this device.
+      parsed.geminiApiKey = state.geminiApiKey || '';
       safeStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
       loadAllState();
       renderDiary();
