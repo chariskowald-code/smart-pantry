@@ -255,13 +255,11 @@
             <div class="text-[11px] text-slate-500 truncate">KI erkennt Komponenten & schätzt Nährwerte</div>
           </div>
         </div>
-        <div class="flex items-center gap-1.5 shrink-0">
-          <button onclick="triggerPhotoInput('meal-camera-input')" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition">📷 Kamera</button>
-          <button onclick="triggerPhotoInput('meal-photo-input')" class="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-50 active:scale-95 transition">Galerie</button>
-        </div>
+        <button onclick="triggerPhotoInput('meal-photo-input')" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition shrink-0">
+          Foto wählen
+        </button>
         <!-- No capture attribute so iOS/Android always lets user choose Photo Library / Gallery OR Camera -->
         <input id="meal-photo-input" type="file" accept="image/*" class="hidden" onchange="handleMealPhotoUpload(event)" />
-        <input id="meal-camera-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleMealPhotoUpload(event)" />
       </div>
 
       <!-- Meal Sections -->
@@ -294,13 +292,11 @@
             <input id="pantry-search-input" type="text" oninput="renderPantry()" placeholder="Vorrat durchsuchen..." class="w-full pl-9 pr-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-medium focus:outline-none focus:border-emerald-500" />
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
           </div>
-          <button onclick="triggerPhotoInput('pantry-camera-input')" title="Vorrat mit Kamera erfassen" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 hover:bg-emerald-700 active:scale-95 transition shrink-0">📷 Kamera</button>
           <button onclick="triggerPhotoInput('pantry-photo-input')" title="Zutaten / Einkauf aus Galerie scannen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-100 active:scale-95 transition shrink-0">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             <span>Foto-Scan</span>
           </button>
           <input id="pantry-photo-input" type="file" accept="image/*" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'pantry')" />
-          <input id="pantry-camera-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'pantry')" />
         </div>
 
         <!-- Expand/Collapse All + Filter Pills -->
@@ -360,18 +356,16 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <div class="relative flex-1">
+          <div class="relative flex-1 min-w-0">
             <input id="recipe-search-input" type="text" oninput="renderRecipes()" placeholder="Rezept oder Zutat suchen..." class="w-full pl-9 pr-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-medium focus:outline-none focus:border-emerald-500" />
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
           </div>
-          <button onclick="triggerPhotoInput('recipe-camera-input')" title="Rezept mit Kamera erfassen" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shrink-0">📷 Kamera</button>
-          <button onclick="triggerPhotoInput('recipe-photo-input')" title="Rezept/Zutaten aus Galerie scannen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1 hover:bg-emerald-100 shrink-0">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            <span>Galerie</span>
-          </button>
+          <button type="button" onclick="openPhotoCamera('recipe')" title="Rezept direkt mit der Kamera fotografieren" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-extrabold flex items-center gap-1.5 hover:bg-emerald-700 shrink-0">📷 <span>Scannen</span></button>
+          <button type="button" onclick="triggerPhotoInput('recipe-photo-input')" title="Rezeptfoto aus Galerie auswählen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shrink-0">Galerie</button>
           <input id="recipe-photo-input" type="file" accept="image/*" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'recipe')" />
           <input id="recipe-camera-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'recipe')" />
         </div>
+        <p class="text-[10px] text-slate-500">Fotografiere eine gedruckte oder handgeschriebene Rezeptseite. Die KI erstellt daraus einen bearbeitbaren Rezeptentwurf.</p>
       </div>
 
       <div id="recipes-list-container" class="space-y-3"></div>
@@ -653,6 +647,19 @@
         </div>
       </div>
     </div>
+  </div>
+
+
+  <!-- LIVE CAMERA MODAL FOR RECIPE SCANNING -->
+  <div id="photo-camera-modal" class="hidden fixed inset-0 z-[70] bg-slate-950/95 flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-xl flex items-center justify-between text-white mb-3">
+      <div><div class="font-extrabold text-base">Rezept fotografieren</div><div class="text-xs text-slate-300">Seite möglichst flach und gut beleuchtet halten</div></div>
+      <button type="button" onclick="closePhotoCamera()" class="px-3 py-2 rounded-xl bg-white/15 text-white font-bold">Schließen ✕</button>
+    </div>
+    <div class="w-full max-w-xl rounded-2xl overflow-hidden bg-black border border-white/20"><video id="photo-camera-video" autoplay playsinline muted class="w-full max-h-[68vh] object-contain"></video></div>
+    <p id="photo-camera-hint" class="text-xs text-slate-300 text-center mt-3">Kamera wird gestartet …</p>
+    <button type="button" id="photo-camera-capture" onclick="capturePhotoCamera()" disabled class="mt-4 w-full max-w-xl py-4 rounded-2xl bg-emerald-500 text-white text-base font-extrabold disabled:opacity-40">📷 Foto aufnehmen</button>
+    <button type="button" onclick="closePhotoCamera()" class="mt-2 px-4 py-2 text-sm font-bold text-slate-300">Abbrechen</button>
   </div>
 
   <!-- ==================== MODAL: RECIPE EDITOR (CREATE / EDIT / MEAL SCAN) ==================== -->
@@ -2717,12 +2724,80 @@ function renderShopping() {
 // ============================================================================
 // GALLERY / CAMERA PHOTO UPLOAD & CLIENT-SIDE COMPRESSION
 // ============================================================================
+let activePhotoCameraStream = null;
+let activePhotoCameraTarget = 'recipe';
+
+async function openPhotoCamera(target = 'recipe') {
+  activePhotoCameraTarget = target;
+  const modal = document.getElementById('photo-camera-modal');
+  const video = document.getElementById('photo-camera-video');
+  const hint = document.getElementById('photo-camera-hint');
+  const captureBtn = document.getElementById('photo-camera-capture');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const fallback = document.getElementById(target === 'recipe' ? 'recipe-camera-input' : 'recipe-photo-input');
+    if (fallback) { fallback.value = ''; fallback.click(); }
+    else showToast('Kamera nicht verfügbar. Bitte Galerie verwenden.', 'error');
+    return;
+  }
+  modal.classList.remove('hidden');
+  captureBtn.disabled = true;
+  hint.textContent = 'Kamerazugriff wird angefragt …';
+  try {
+    activePhotoCameraStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = activePhotoCameraStream;
+    await video.play();
+    captureBtn.disabled = false;
+    hint.textContent = 'Richte die Kamera auf die ganze Rezeptseite und tippe auf „Foto aufnehmen“.';
+  } catch (err) {
+    closePhotoCamera();
+    const msg = err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')
+      ? 'Kamerazugriff verweigert. Bitte in Android die Kameraberechtigung für die Website erlauben.'
+      : 'Kamera konnte nicht gestartet werden. Bitte Galerie auswählen oder Kameraberechtigung prüfen.';
+    showToast(msg, 'error');
+    const fallback = document.getElementById(target === 'recipe' ? 'recipe-camera-input' : 'recipe-photo-input');
+    if (fallback) { fallback.value = ''; fallback.click(); }
+  }
+}
+
+function closePhotoCamera() {
+  const video = document.getElementById('photo-camera-video');
+  if (activePhotoCameraStream) {
+    activePhotoCameraStream.getTracks().forEach(track => track.stop());
+    activePhotoCameraStream = null;
+  }
+  if (video) video.srcObject = null;
+  const modal = document.getElementById('photo-camera-modal');
+  if (modal) modal.classList.add('hidden');
+  const captureBtn = document.getElementById('photo-camera-capture');
+  if (captureBtn) captureBtn.disabled = true;
+}
+
+async function capturePhotoCamera() {
+  const video = document.getElementById('photo-camera-video');
+  if (!video || !video.videoWidth || !video.videoHeight) {
+    showToast('Kamera ist noch nicht bereit. Bitte kurz warten.', 'error');
+    return;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(async blob => {
+    if (!blob) { showToast('Foto konnte nicht erstellt werden. Bitte erneut versuchen.', 'error'); return; }
+    const file = new File([blob], 'rezept-foto.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+    const target = activePhotoCameraTarget;
+    closePhotoCamera();
+    await handleIngredientsPhotoUpload({ target: { files: [file], value: '' } }, target);
+  }, 'image/jpeg', 0.94);
+}
+
 function triggerPhotoInput(inputId) {
   const el = document.getElementById(inputId);
-  if (el) {
-    el.value = '';
-    el.click();
-  }
+  if (el) { el.value = ''; el.click(); }
 }
 
 function compressImageToBase64(file, maxDim = 1024, quality = 0.8) {
@@ -2791,46 +2866,55 @@ Antworte ausschließlich als JSON-Objekt:
 }
 
 async function handleIngredientsPhotoUpload(event, target) {
-  const input = event.target;
-  const file = input.files && input.files[0];
+  const file = event.target.files && event.target.files[0];
   if (!file) return;
-  input.value = '';
   if (!state.geminiApiKey || state.geminiApiKey.trim().length < 10) {
     showToast('Bitte unter Backup & KI zuerst deinen Gemini API-Key hinterlegen', 'error');
     return;
   }
-  showToast(target === 'pantry' ? 'Vorrat wird per Kamera/Foto erkannt...' : 'Rezept wird per Kamera/Foto erkannt...', 'info');
+  showToast('Bild wird nach Zutaten gescannt...', 'info');
   try {
-    const b64 = await compressImageToBase64(file, 1024, 0.8);
-    const prompt = target === 'recipe'
-      ? `Lies dieses Foto als Rezeptquelle aus. Es kann eine handschriftliche oder gedruckte Rezeptseite, ein Rezept-Screenshot oder ein Foto von Zutaten sein. Wenn ein vollständiges Rezept erkennbar ist, extrahiere Name, Portionen, Zubereitung und Zutaten. Wenn nur Lebensmittel/Zutaten erkennbar sind, erstelle daraus eine Zutatenliste. Schätze Mengen nur, wenn sie erkennbar oder sinnvoll ableitbar sind; erfinde keine Zubereitungsschritte. Nährwerte pro 100g schätzen, falls möglich.
-Antworte ausschließlich als JSON-Objekt:
-{"name":"Rezeptname","servings":2,"instructions":"Zubereitung oder leerer Text","ingredients":[{"name":"Zutat","grams":150,"kcal":100,"protein":5,"carbs":10,"fat":3}]}`
-      : `Erkenne auf diesem Foto (Kühlschrank, Vorratsschrank, Lebensmittel, Einkaufszettel oder Kassenzettel) alle sichtbaren Lebensmittel. Schätze die vorhandenen Mengen vorsichtig und gib Einheit sowie Nährwerte pro 100g an. Bei Unsicherheit eine plausible kleine Menge schätzen und diese später zur Prüfung anzeigen.
-Antworte ausschließlich als JSON-Array:
-[{"name":"Zutat","amount":250,"unit":"g","kcal":100,"protein":5,"carbs":10,"fat":3,"storage":"Kühlschrank"}]`;
-    const result = await callGeminiJson(prompt, b64);
-    if (target === 'recipe' && result && !Array.isArray(result) && Array.isArray(result.ingredients)) {
-      editorIngredients = result.ingredients.map(i => {
+    const b64 = await compressImageToBase64(file, target === 'recipe' ? 1800 : 1400, target === 'recipe' ? 0.9 : 0.84);
+    if (target === 'recipe') {
+      const prompt = `Du bist ein sorgfältiger Rezept-Transkribierer. Lies das abgebildete Rezept so genau wie möglich ab.
+Extrahiere Rezeptname, Anzahl Portionen, ALLE Zutaten samt Mengen und Zubereitungsschritte in der richtigen Reihenfolge.
+Übernimm Mengen und Einheiten aus dem Bild. Erfinde keine Zutaten oder Mengen. Wenn etwas unleserlich oder nicht angegeben ist, verwende einen leeren String bzw. null und erwähne Unsicherheiten in "notes".
+Gib Zutatenmengen für die angegebene Gesamtmenge an. Erhalte Stück, EL, TL und Prisen als Originaleinheit.
+Antworte ausschließlich mit einem JSON-Objekt in diesem Format:
+{"name":"Rezeptname","servings":4,"instructions":"1. Schritt ...\n2. Schritt ...","ingredients":[{"name":"Mehl","amount":250,"unit":"g"},{"name":"Eier","amount":2,"unit":"Stück"}],"notes":"Unklare Textstellen oder fehlende Angaben; sonst leerer String."}`;
+      const obj = await callGeminiJson(prompt, b64);
+      if (!obj || !Array.isArray(obj.ingredients) || !obj.ingredients.length) throw new Error('NO_RECIPE_CONTENT');
+      editorIngredients = obj.ingredients.map(i => {
         const ref = findReferenceNutrition(i.name || '');
+        const amount = Number(i.amount);
+        const unit = String(i.unit || 'g');
+        const isWeight = /^(g|gramm|ml|milliliter)$/i.test(unit);
+        // The existing nutrition model is gram-based. Preserve non-weight quantities
+        // verbatim in the ingredient name instead of incorrectly treating e.g. 2 eggs as 2 g.
+        const grams = isWeight && Number.isFinite(amount) && amount > 0 ? amount : 100;
+        const quantityLabel = !isWeight && Number.isFinite(amount) && amount > 0 ? ` – ${amount} ${unit}` : '';
         return {
-          name: i.name || 'Zutat',
-          grams: Number(i.grams) || 100,
-          kcal: ref && ref.kcal > 0 ? ref.kcal : (Number(i.kcal) || 0),
-          protein: ref && ref.kcal > 0 ? ref.protein : (Number(i.protein) || 0),
-          carbs: ref && ref.kcal > 0 ? ref.carbs : (Number(i.carbs) || 0),
-          fat: ref && ref.kcal > 0 ? ref.fat : (Number(i.fat) || 0)
+          name: `${i.name || 'Zutat'}${quantityLabel}`,
+          grams,
+          kcal: ref ? ref.kcal : 0,
+          protein: ref ? ref.protein : 0,
+          carbs: ref ? ref.carbs : 0,
+          fat: ref ? ref.fat : 0
         };
       });
       openRecipeEditorModal(null, true);
-      document.getElementById('re-name').value = result.name || 'Gescanntes Rezept';
-      document.getElementById('re-servings').value = result.servings || 1;
-      document.getElementById('re-instructions').value = result.instructions || '';
-      showToast('Rezept erkannt – bitte Zutaten und Mengen prüfen');
+      document.getElementById('re-name').value = obj.name || 'Gescanntes Rezept';
+      document.getElementById('re-servings').value = Math.max(1, Number(obj.servings) || 1);
+      document.getElementById('re-instructions').value = [obj.instructions || '', obj.notes ? `Hinweise zum Scan: ${obj.notes}` : ''].filter(Boolean).join('\n\n');
+      showToast('Rezept erkannt – bitte Angaben prüfen und speichern');
       return;
     }
-    const arr = Array.isArray(result) ? result : (result && Array.isArray(result.ingredients) ? result.ingredients : []);
-    if (arr.length > 0) {
+
+    const prompt = `Erkenne auf diesem Foto (Einkaufszettel, Kassenzettel, Zutatenliste oder Lebensmittel) alle sichtbaren Lebensmittel mit geschätzter Menge in Gramm und Nährwerten pro 100g.
+Antworte ausschließlich als JSON-Array:
+[{"name":"Zutat","amount":250,"unit":"g","kcal":100,"protein":5,"carbs":10,"fat":3,"storage":"Kühlschrank"}]`;
+    const arr = await callGeminiJson(prompt, b64);
+    if (Array.isArray(arr) && arr.length > 0) {
       if (target === 'pantry') {
         voiceParsedDrafts = arr.map(i => {
           const ref = findReferenceNutrition(i.name || '');
@@ -2869,7 +2953,14 @@ Antworte ausschließlich als JSON-Array:
       }
     }
   } catch (e) {
-    showToast('Foto-Scan fehlgeschlagen', 'error');
+    const message = e && e.message === 'NO_RECIPE_CONTENT'
+      ? 'Kein lesbares Rezept erkannt. Bitte näher, schärfer oder bei besserem Licht fotografieren.'
+      : e && e.message === 'NO_KEY'
+        ? 'Bitte zuerst unter Backup & KI den Gemini API-Key hinterlegen.'
+        : 'Foto-Scan fehlgeschlagen. Bitte Internetverbindung und Gemini API-Key prüfen und erneut versuchen.';
+    showToast(message, 'error');
+  } finally {
+    if (event && event.target && 'value' in event.target) event.target.value = '';
   }
 }
 
@@ -2926,7 +3017,7 @@ async function callGeminiJson(promptText, imageBase64 = null) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts }],
-          generationConfig: { temperature: 0.2 }
+          generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
         })
       });
       if (!res.ok) continue;
