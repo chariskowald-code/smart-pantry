@@ -268,13 +268,13 @@
           </div>
         </div>
 
-        <!-- Vorratssuche und QR-Code-Scan -->
+        <!-- Vorratssuche und Barcode-Scan -->
         <div class="flex items-center gap-2">
           <div class="relative flex-1">
             <input id="pantry-search-input" type="text" oninput="renderPantry()" placeholder="Vorrat durchsuchen..." class="w-full pl-9 pr-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-medium focus:outline-none focus:border-emerald-500" />
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
           </div>
-          <button onclick="startQrScanner('pantry')" title="QR-Code für Vorrat scannen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shrink-0">▦ QR</button>
+          <button onclick="toggleBarcodeScanner('pantry')" title="Barcode für Vorrat scannen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shrink-0">▥ Barcode</button>
         </div>
 
         <!-- Expand/Collapse All + Filter Pills -->
@@ -431,19 +431,11 @@
             <input id="diary-food-search-input" type="text" oninput="onDiarySearchInput(this.value)" placeholder="Suchen (z. B. Haferflocken, Ketchup, Rezept...)" class="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-semibold focus:outline-none focus:border-emerald-500" />
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
           </div>
-          <button onclick="startQrScanner('diary')" title="QR-Code scannen" class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100">▦</button>
-          <button onclick="toggleBarcodeScanner()" title="Barcode scannen" class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100">
+          <button onclick="toggleBarcodeScanner('diary')" title="Barcode scannen" class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7V5a2 2 0 012-2h2m10 0h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10"/></svg>
           </button>
         </div>
 
-        <!-- Barcode Reader Container -->
-        <div id="barcode-scanner-box" class="hidden rounded-2xl overflow-hidden border border-emerald-200 bg-slate-900">
-          <div id="barcode-reader" class="w-full"></div>
-          <div class="p-2 bg-slate-900 text-center">
-            <button onclick="stopBarcodeScanner()" class="text-xs font-bold text-rose-400">Scanner schließen</button>
-          </div>
-        </div>
 
         <!-- Selected Item Amount & Unit Adjuster -->
         <div id="selected-diary-food-box" class="hidden card-soft p-3.5 bg-emerald-50/50 border-emerald-200 space-y-3">
@@ -755,11 +747,13 @@
   </div>
 
 
-<div id="qr-scan-modal" class="hidden fixed inset-0 z-[80] bg-slate-950/95 flex flex-col items-center justify-center p-4">
-  <div class="w-full max-w-md flex items-center justify-between text-white mb-3"><div><div class="font-extrabold">QR-Code scannen</div><div id="qr-scan-hint" class="text-xs text-slate-300">Code in den Rahmen halten</div></div><button onclick="stopQrScanner()" class="px-3 py-2 rounded-xl bg-white/15 text-white font-bold">Schließen ✕</button></div>
-  <div id="qr-code-reader" class="w-full max-w-md overflow-hidden rounded-2xl bg-black"></div>
-  <p class="text-xs text-slate-300 mt-3 text-center">Der QR-Inhalt wird nicht automatisch geöffnet. Bitte erkannte Angaben prüfen.</p>
+<!-- Gemeinsamer Scanner-Container für Tagebuch und Vorrat -->
+<div id="barcode-scanner-box" class="hidden fixed inset-0 z-[90] bg-slate-950/95 flex flex-col items-center justify-center p-4">
+  <div class="w-full max-w-md flex items-center justify-between text-white mb-3"><div class="font-extrabold">Barcode scannen</div><button onclick="stopBarcodeScanner()" class="px-3 py-2 rounded-xl bg-white/15 text-white font-bold">Schließen ✕</button></div>
+  <div id="barcode-reader" class="w-full max-w-md overflow-hidden rounded-2xl bg-black"></div>
+  <p class="text-xs text-slate-300 mt-3 text-center">EAN- oder UPC-Produktcode in den Rahmen halten.</p>
 </div>
+
 <script>
 // ============================================================================
 // EMBEDDED SWISS FOOD COMPOSITION DATABASE V 7.1 (01.07.2026) - 1,246 ITEMS
@@ -925,20 +919,28 @@ function inferMacroCategory(name, kcal, protein, carbs, fat, dbCat = '') {
 // Durchschnittliche Portions-/Stückgewichte (Richtwerte, jederzeit manuell änderbar).
 // Die Werte sind praktische Näherungen, keine amtlichen oder individuellen Portionsvorgaben.
 const COMMON_PORTION_GRAMS = [
-  [/ei|eier/, 60], [/banane/, 120], [/apfel|birne|orange|kiwi|pfirsich|nektarine/, 150],
+  // Stück / einzelne Lebensmittel
+  [/\b(ei|eier)\b/, 60], [/banane/, 120], [/apfel|birne|orange|kiwi|pfirsich|nektarine/, 150],
   [/avocado/, 150], [/tomate/, 120], [/kartoffel/, 170], [/karotte|rüebli/, 80],
   [/zwiebel/, 80], [/knoblauchzehe/, 5], [/brotscheibe|toast|brot/, 40],
-  [/brötchen|semmel|weckerl/, 60], [/joghurt|skyr|quark|topfen/, 150],
-  [/milch|drink|saft/, 200], [/käse|emmentaler|mozzarella/, 30],
-  [/reis|nudeln|pasta|spaghetti/, 80], [/haferflocken|müsli/, 50],
-  [/mehl/, 30], [/butter/, 10], [/olivenöl|öl/, 10], [/erdnussbutter|nussmus/, 15],
-  [/erdbeere|himbeere|heidelbeere|beeren/, 100], [/gurke/, 100],
-  [/paprika|peperoni/, 150], [/champignon|pilz/, 20], [/tofu/, 125]
+  [/brötchen|semmel|weckerl/, 60], [/erdbeere|himbeere|heidelbeere|beeren/, 100],
+  [/gurke/, 100], [/paprika|peperoni/, 150], [/champignon|pilz/, 20],
+  // Typische Einzelportionen / Packungsportionen
+  [/joghurt|skyr|quark|topfen|pudding|dessert/, 150], [/milch|drink|saft/, 200],
+  [/käse|emmentaler|mozzarella/, 30], [/reis|nudeln|pasta|spaghetti/, 80],
+  [/haferflocken|müsli|cornflakes/, 50], [/mehl/, 30], [/butter/, 10],
+  [/olivenöl|öl/, 10], [/erdnussbutter|nussmus/, 15], [/tofu/, 125],
+  [/lachs|forelle|fischfilet|hähnchen|huhn|poulet|fleischfilet|steak/, 150],
+  [/wurst|aufschnitt|schinken/, 30], [/nüsse|mandeln|walnüsse|cashew/, 30],
+  [/schokolade/, 25]
 ];
-function getSuggestedPortionGrams(name, fallback = 100) {
+function getKnownPortionGrams(name) {
   const text = String(name || '').toLocaleLowerCase('de');
   for (const [pattern, grams] of COMMON_PORTION_GRAMS) if (pattern.test(text)) return grams;
-  return fallback;
+  return null;
+}
+function getSuggestedPortionGrams(name, fallback = 100) {
+  return getKnownPortionGrams(name) || fallback;
 }
 function convertRecipeQuantityToGrams(name, amount, unit) {
   const n = Number(amount);
@@ -1406,12 +1408,14 @@ function onDiarySearchInput(val) {
       badgeClass: 'bg-sky-100 text-sky-700',
       name: ch.name,
       sub: ch.synonyms ? `Syn.: ${ch.synonyms}` : ch.category,
-      kcal: ch.kcal,
-      protein: ch.protein,
-      carbs: ch.carbs,
-      fat: ch.fat,
-      defaultUnit: 'g',
-      portionG: getSuggestedPortionGrams(ch.name, 100)
+      // Swiss DB values are per 100 g. If a known portion exists, convert
+      // the displayed macros to that portion and make Portion the default.
+      kcal: getKnownPortionGrams(ch.name) ? ch.kcal * getKnownPortionGrams(ch.name) / 100 : ch.kcal,
+      protein: getKnownPortionGrams(ch.name) ? ch.protein * getKnownPortionGrams(ch.name) / 100 : ch.protein,
+      carbs: getKnownPortionGrams(ch.name) ? ch.carbs * getKnownPortionGrams(ch.name) / 100 : ch.carbs,
+      fat: getKnownPortionGrams(ch.name) ? ch.fat * getKnownPortionGrams(ch.name) / 100 : ch.fat,
+      defaultUnit: getKnownPortionGrams(ch.name) ? 'Portion' : 'g',
+      portionG: getKnownPortionGrams(ch.name) || 100
     });
   });
 
@@ -1563,123 +1567,80 @@ function confirmAddDiaryEntry() {
   showToast('Im Tagebuch eingetragen');
 }
 
-// QR-Code Scanner für Tagebuch und Vorrat
-let qrCodeScanner = null;
-let qrScanTarget = 'diary';
-async function startQrScanner(target) {
-  qrScanTarget = target;
-  document.getElementById('qr-scan-modal').classList.remove('hidden');
-  document.getElementById('qr-scan-hint').textContent = target === 'pantry' ? 'Produkt-QR-Code für deinen Vorrat scannen' : 'Produkt-QR-Code fürs Tagebuch scannen';
-  try {
-    if (!window.Html5Qrcode) throw new Error('QR-Bibliothek nicht geladen');
-    qrCodeScanner = new Html5Qrcode('qr-code-reader', { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] });
-    await qrCodeScanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 230, height: 230 } }, async decodedText => {
-      const value = String(decodedText || '').trim();
-      const targetAtScan = qrScanTarget;
-      await stopQrScanner();
-      await handleDecodedQr(value, targetAtScan);
-    }, () => {});
-  } catch (err) {
-    await stopQrScanner();
-    showToast('QR-Scanner konnte nicht gestartet werden. Bitte Kamerazugriff erlauben.', 'error');
-  }
-}
-async function stopQrScanner() {
-  if (qrCodeScanner) {
-    try { await qrCodeScanner.stop(); } catch (_) {}
-    try { qrCodeScanner.clear(); } catch (_) {}
-    qrCodeScanner = null;
-  }
-  document.getElementById('qr-scan-modal').classList.add('hidden');
-}
-async function handleDecodedQr(value, target) {
-  if (!value) return;
-  // Produkt-QR-Codes mit GTIN/EAN werden in Open Food Facts nachgeschlagen.
-  const digits = value.replace(/[^0-9]/g, '');
-  if (/^\d{8,14}$/.test(digits)) {
-    try {
-      const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(digits)}.json`);
-      const data = await response.json();
-      if (data.status === 1 && data.product) {
-        const p = data.product, n = p.nutriments || {};
-        const item = { name: p.product_name || p.product_name_de || digits, kcal: Number(n['energy-kcal_100g'] || 0), protein: Number(n.proteins_100g || 0), carbs: Number(n.carbohydrates_100g || 0), fat: Number(n.fat_100g || 0) };
-        if (target === 'diary') {
-          renderDiaryCandidateList([{ type: 'QR / Open Food Facts', badgeClass: 'bg-emerald-100 text-emerald-800', ...item, defaultUnit: 'g', portionG: 100 }]);
-          selectDiaryCandidate(0);
-        } else {
-          openAddPantryModal();
-          document.getElementById('pm-name').value = item.name;
-          document.getElementById('pm-lookup-input').value = item.name;
-          document.getElementById('pm-amount').value = '1';
-          document.getElementById('pm-unit').value = 'Stk';
-          document.getElementById('pm-portion-g').value = '100';
-          document.getElementById('pm-kcal').value = item.kcal;
-          document.getElementById('pm-protein').value = item.protein;
-          document.getElementById('pm-carbs').value = item.carbs;
-          document.getElementById('pm-fat').value = item.fat;
-        }
-        showToast('Produkt erkannt – bitte Angaben prüfen');
-        return;
-      }
-    } catch (_) { showToast('Produktdaten konnten nicht geladen werden', 'error'); return; }
-  }
-  // Beliebige QR-Inhalte werden als Suchtext übernommen, niemals automatisch geöffnet.
-  const textValue = value.length > 180 ? value.slice(0, 180) : value;
-  if (target === 'diary') {
-    document.getElementById('diary-food-search-input').value = textValue;
-    onDiarySearchInput(textValue);
-  } else {
-    openAddPantryModal();
-    document.getElementById('pm-name').value = textValue;
-    document.getElementById('pm-lookup-input').value = textValue;
-    onPantryLookup(textValue);
-  }
-  showToast('QR-Inhalt übernommen – bitte prüfen');
-}
-
-// Barcode Scanner
-function toggleBarcodeScanner() {
+// Gemeinsamer Barcode-Scanner für Tagebuch und Vorrat
+let barcodeScanTarget = 'diary';
+// Barcode Scanner (EAN/UPC und weitere Produkt-Barcodes; keine QR-Codes)
+function toggleBarcodeScanner(target = 'diary') {
   const box = document.getElementById('barcode-scanner-box');
-  if (!box.classList.contains('hidden')) {
+  if (html5QrScanner && !box.classList.contains('hidden')) {
     stopBarcodeScanner();
     return;
   }
+  barcodeScanTarget = target;
   box.classList.remove('hidden');
   try {
-    html5QrScanner = new Html5Qrcode('barcode-reader');
+    const formats = [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.ITF
+    ];
+    html5QrScanner = new Html5Qrcode('barcode-reader', { formatsToSupport: formats });
     html5QrScanner.start(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 240, height: 140 } },
+      { fps: 10, qrbox: { width: 280, height: 150 } },
       async (decodedText) => {
+        const scannedCode = String(decodedText || '').trim();
+        const targetAtScan = barcodeScanTarget;
         stopBarcodeScanner();
-        showToast('Barcode: ' + decodedText, 'info');
+        showToast('Barcode erkannt: ' + scannedCode, 'info');
         try {
-          const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(decodedText)}.json`);
+          const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(scannedCode)}.json`);
           const d = await r.json();
-          if (d.status === 1 && d.product) {
-            const p = d.product;
-            const nu = p.nutriments || {};
+          if (d.status !== 1 || !d.product) {
+            showToast('Produkt nicht in Open Food Facts gefunden', 'error');
+            return;
+          }
+          const p = d.product;
+          const nu = p.nutriments || {};
+          const item = {
+            name: p.product_name || p.product_name_de || scannedCode,
+            kcal: Number(nu['energy-kcal_100g'] || 0),
+            protein: Number(nu.proteins_100g || 0),
+            carbs: Number(nu.carbohydrates_100g || 0),
+            fat: Number(nu.fat_100g || 0)
+          };
+          if (targetAtScan === 'diary') {
             renderDiaryCandidateList([{
-              type: 'Barcode',
-              badgeClass: 'bg-emerald-100 text-emerald-800',
-              name: p.product_name || decodedText,
-              kcal: Number(nu['energy-kcal_100g'] || 0),
-              protein: Number(nu.proteins_100g || 0),
-              carbs: Number(nu.carbohydrates_100g || 0),
-              fat: Number(nu.fat_100g || 0),
-              defaultUnit: 'g',
-              portionG: 100
+              type: 'Barcode / Open Food Facts', badgeClass: 'bg-emerald-100 text-emerald-800',
+              ...item, defaultUnit: 'g', portionG: 100
             }]);
             selectDiaryCandidate(0);
           } else {
-            showToast('Produkt nicht in Barcode-DB gefunden', 'error');
+            openAddPantryModal();
+            document.getElementById('pm-name').value = item.name;
+            document.getElementById('pm-lookup-input').value = item.name;
+            document.getElementById('pm-amount').value = '1';
+            document.getElementById('pm-unit').value = 'Stk';
+            document.getElementById('pm-portion-g').value = '100';
+            document.getElementById('pm-kcal').value = item.kcal;
+            document.getElementById('pm-protein').value = item.protein;
+            document.getElementById('pm-carbs').value = item.carbs;
+            document.getElementById('pm-fat').value = item.fat;
           }
+          showToast('Produkt erkannt – bitte Angaben prüfen');
         } catch (e) {
           showToast('Barcode-Abfrage fehlgeschlagen', 'error');
         }
       },
       () => {}
-    );
+    ).catch(() => {
+      stopBarcodeScanner();
+      showToast('Scanner konnte nicht gestartet werden. Bitte Kamerazugriff erlauben.', 'error');
+    });
   } catch (e) {
     box.classList.add('hidden');
     showToast('Kamera nicht verfügbar', 'error');
@@ -1690,7 +1651,9 @@ function stopBarcodeScanner() {
   const box = document.getElementById('barcode-scanner-box');
   box.classList.add('hidden');
   if (html5QrScanner) {
-    html5QrScanner.stop().catch(() => {});
+    html5QrScanner.stop().catch(() => {}).finally(() => {
+      try { html5QrScanner && html5QrScanner.clear(); } catch (_) {}
+    });
     html5QrScanner = null;
   }
 }
@@ -1777,7 +1740,7 @@ function renderPantry() {
       <div class="card-soft p-6 text-center space-y-2">
         <div class="text-2xl">🥫</div>
         <div class="text-sm font-extrabold text-slate-700">Dein Vorrat ist noch leer</div>
-        <p class="text-xs text-slate-500">Nutze <b>QR-Scan</b>, <b>Sprache / Text</b> für Mehrfachnennungen oder <b>+ Artikel</b>.</p>
+        <p class="text-xs text-slate-500">Nutze <b>Barcode-Scan</b>, <b>Sprache / Text</b> für Mehrfachnennungen oder <b>+ Artikel</b>.</p>
       </div>
     `;
     return;
