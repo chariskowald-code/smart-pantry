@@ -255,11 +255,13 @@
             <div class="text-[11px] text-slate-500 truncate">KI erkennt Komponenten & schätzt Nährwerte</div>
           </div>
         </div>
-        <button onclick="triggerPhotoInput('meal-photo-input')" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition shrink-0">
-          Foto wählen
-        </button>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button onclick="triggerPhotoInput('meal-camera-input')" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition">📷 Kamera</button>
+          <button onclick="triggerPhotoInput('meal-photo-input')" class="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-50 active:scale-95 transition">Galerie</button>
+        </div>
         <!-- No capture attribute so iOS/Android always lets user choose Photo Library / Gallery OR Camera -->
         <input id="meal-photo-input" type="file" accept="image/*" class="hidden" onchange="handleMealPhotoUpload(event)" />
+        <input id="meal-camera-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleMealPhotoUpload(event)" />
       </div>
 
       <!-- Meal Sections -->
@@ -292,11 +294,13 @@
             <input id="pantry-search-input" type="text" oninput="renderPantry()" placeholder="Vorrat durchsuchen..." class="w-full pl-9 pr-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-medium focus:outline-none focus:border-emerald-500" />
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
           </div>
+          <button onclick="triggerPhotoInput('pantry-camera-input')" title="Vorrat mit Kamera erfassen" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 hover:bg-emerald-700 active:scale-95 transition shrink-0">📷 Kamera</button>
           <button onclick="triggerPhotoInput('pantry-photo-input')" title="Zutaten / Einkauf aus Galerie scannen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-100 active:scale-95 transition shrink-0">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             <span>Foto-Scan</span>
           </button>
           <input id="pantry-photo-input" type="file" accept="image/*" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'pantry')" />
+          <input id="pantry-camera-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'pantry')" />
         </div>
 
         <!-- Expand/Collapse All + Filter Pills -->
@@ -360,11 +364,13 @@
             <input id="recipe-search-input" type="text" oninput="renderRecipes()" placeholder="Rezept oder Zutat suchen..." class="w-full pl-9 pr-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs font-medium focus:outline-none focus:border-emerald-500" />
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
           </div>
-          <button onclick="triggerPhotoInput('recipe-photo-input')" title="Zutaten-Foto aus Galerie scannen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1 hover:bg-emerald-100 shrink-0">
+          <button onclick="triggerPhotoInput('recipe-camera-input')" title="Rezept mit Kamera erfassen" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shrink-0">📷 Kamera</button>
+          <button onclick="triggerPhotoInput('recipe-photo-input')" title="Rezept/Zutaten aus Galerie scannen" class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1 hover:bg-emerald-100 shrink-0">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            <span>Foto</span>
+            <span>Galerie</span>
           </button>
           <input id="recipe-photo-input" type="file" accept="image/*" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'recipe')" />
+          <input id="recipe-camera-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleIngredientsPhotoUpload(event, 'recipe')" />
         </div>
       </div>
 
@@ -2785,20 +2791,46 @@ Antworte ausschließlich als JSON-Objekt:
 }
 
 async function handleIngredientsPhotoUpload(event, target) {
-  const file = event.target.files && event.target.files[0];
+  const input = event.target;
+  const file = input.files && input.files[0];
   if (!file) return;
+  input.value = '';
   if (!state.geminiApiKey || state.geminiApiKey.trim().length < 10) {
     showToast('Bitte unter Backup & KI zuerst deinen Gemini API-Key hinterlegen', 'error');
     return;
   }
-  showToast('Bild wird nach Zutaten gescannt...', 'info');
+  showToast(target === 'pantry' ? 'Vorrat wird per Kamera/Foto erkannt...' : 'Rezept wird per Kamera/Foto erkannt...', 'info');
   try {
     const b64 = await compressImageToBase64(file, 1024, 0.8);
-    const prompt = `Erkenne auf diesem Foto (Einkaufszettel, Kassenzettel, Zutatenliste oder Lebensmittel) alle sichtbaren Lebensmittel mit geschätzter Menge in Gramm und Nährwerten pro 100g.
+    const prompt = target === 'recipe'
+      ? `Lies dieses Foto als Rezeptquelle aus. Es kann eine handschriftliche oder gedruckte Rezeptseite, ein Rezept-Screenshot oder ein Foto von Zutaten sein. Wenn ein vollständiges Rezept erkennbar ist, extrahiere Name, Portionen, Zubereitung und Zutaten. Wenn nur Lebensmittel/Zutaten erkennbar sind, erstelle daraus eine Zutatenliste. Schätze Mengen nur, wenn sie erkennbar oder sinnvoll ableitbar sind; erfinde keine Zubereitungsschritte. Nährwerte pro 100g schätzen, falls möglich.
+Antworte ausschließlich als JSON-Objekt:
+{"name":"Rezeptname","servings":2,"instructions":"Zubereitung oder leerer Text","ingredients":[{"name":"Zutat","grams":150,"kcal":100,"protein":5,"carbs":10,"fat":3}]}`
+      : `Erkenne auf diesem Foto (Kühlschrank, Vorratsschrank, Lebensmittel, Einkaufszettel oder Kassenzettel) alle sichtbaren Lebensmittel. Schätze die vorhandenen Mengen vorsichtig und gib Einheit sowie Nährwerte pro 100g an. Bei Unsicherheit eine plausible kleine Menge schätzen und diese später zur Prüfung anzeigen.
 Antworte ausschließlich als JSON-Array:
 [{"name":"Zutat","amount":250,"unit":"g","kcal":100,"protein":5,"carbs":10,"fat":3,"storage":"Kühlschrank"}]`;
-    const arr = await callGeminiJson(prompt, b64);
-    if (Array.isArray(arr) && arr.length > 0) {
+    const result = await callGeminiJson(prompt, b64);
+    if (target === 'recipe' && result && !Array.isArray(result) && Array.isArray(result.ingredients)) {
+      editorIngredients = result.ingredients.map(i => {
+        const ref = findReferenceNutrition(i.name || '');
+        return {
+          name: i.name || 'Zutat',
+          grams: Number(i.grams) || 100,
+          kcal: ref && ref.kcal > 0 ? ref.kcal : (Number(i.kcal) || 0),
+          protein: ref && ref.kcal > 0 ? ref.protein : (Number(i.protein) || 0),
+          carbs: ref && ref.kcal > 0 ? ref.carbs : (Number(i.carbs) || 0),
+          fat: ref && ref.kcal > 0 ? ref.fat : (Number(i.fat) || 0)
+        };
+      });
+      openRecipeEditorModal(null, true);
+      document.getElementById('re-name').value = result.name || 'Gescanntes Rezept';
+      document.getElementById('re-servings').value = result.servings || 1;
+      document.getElementById('re-instructions').value = result.instructions || '';
+      showToast('Rezept erkannt – bitte Zutaten und Mengen prüfen');
+      return;
+    }
+    const arr = Array.isArray(result) ? result : (result && Array.isArray(result.ingredients) ? result.ingredients : []);
+    if (arr.length > 0) {
       if (target === 'pantry') {
         voiceParsedDrafts = arr.map(i => {
           const ref = findReferenceNutrition(i.name || '');
