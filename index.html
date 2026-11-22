@@ -9,9 +9,14 @@
   <meta name="apple-mobile-web-app-title" content="Smart Pantry" />
   <title>Smart Pantry – Ernährung, Vorrat & Rezepte</title>
 
-  <!-- Tailwind CSS & Lucide Icons CDN -->
+  <!-- Inline SVG Favicon (verhindert 404 auf GitHub Pages Unterordnern) -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%2310B981'/%3E%3Cpath d='M12 34c0 10 9 18 20 18s20-8 20-18H12z' fill='%23FFFFFF'/%3E%3Cpath d='M32 31c0-10 7-17 17-17 0 10-7 17-17 17z' fill='%23A7F3D0'/%3E%3Ccircle cx='32' cy='11' r='4.5' fill='%23F43F5E'/%3E%3C/svg%3E" />
+  <link id="sp-manifest-link" rel="manifest" href="" />
+
+  <!-- Tailwind CSS & Lucide Icons & html5-qrcode CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -91,15 +96,17 @@
     .ring-anim {
       transition: stroke-dashoffset 0.45s cubic-bezier(0.22, 1, 0.36, 1);
     }
+    #qr-reader video {
+      border-radius: 16px !important;
+      object-fit: cover !important;
+    }
   </style>
-
-  <link id="sp-manifest-link" rel="manifest" href="" />
 </head>
 <body class="min-h-screen flex justify-center bg-[#EAE6DF]">
   <div class="w-full max-w-lg min-h-screen bg-offwhite flex flex-col relative shadow-2xl border-x border-zinc-200/80">
 
     <!-- ===================================================================== -->
-    <!-- KOPFLEISTE MIT LOGO, DATUM & BACKUP / EINSTELLUNGEN                   -->
+    <!-- KOPFLEISTE MIT LOGO, DATUM & BACKUP / KI-EINSTELLUNGEN                -->
     <!-- ===================================================================== -->
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-zinc-200/75 px-4 py-3 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2.5 min-w-0">
@@ -123,20 +130,12 @@
       <div class="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
-          onclick="openSettingsModal('backup')"
-          title="Datensicherung (JSON Export & Import)"
+          onclick="openSettingsModal()"
+          title="Datensicherung, Tagesziele & KI-Schlüssel"
           class="h-9 px-3 rounded-xl bg-mint-50 hover:bg-mint-100 text-mint-700 text-xs font-bold flex items-center gap-1.5 transition"
         >
           <i data-lucide="shield-check" class="w-4 h-4"></i>
-          <span>Backup</span>
-        </button>
-        <button
-          type="button"
-          onclick="openSettingsModal('general')"
-          aria-label="Einstellungen"
-          class="w-9 h-9 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 flex items-center justify-center transition"
-        >
-          <i data-lucide="settings" class="w-4 h-4"></i>
+          <span>Backup & KI</span>
         </button>
       </div>
     </header>
@@ -144,10 +143,10 @@
     <!-- ===================================================================== -->
     <!-- HAUPTBEREICH MIT DEN 4 TABS                                           -->
     <!-- ===================================================================== -->
-    <main class="flex-1 overflow-y-auto pb-28 px-4 pt-4">
+    <main class="flex-1 overflow-y-auto pb-32 px-4 pt-4">
 
       <!-- =================================================================== -->
-      <!-- TAB 1: TAGEBUCH (YAZIO-INSPIRIERTER AUFBAU & LOOK)                  -->
+      <!-- TAB 1: TAGEBUCH                                                     -->
       <!-- =================================================================== -->
       <section id="tab-diary" class="tab-panel active space-y-4">
 
@@ -181,12 +180,14 @@
         <!-- Kalorien-Fortschrittsring + Drei Makro-Fortschrittsbalken -->
         <div class="bg-cardbg rounded-[24px] p-4 shadow-card border border-zinc-200/65 space-y-4">
           <div class="flex items-center justify-between">
-            <h2 class="font-display font-bold text-sm text-zinc-800">Tagesbilanz</h2>
+            <div class="flex items-center gap-2">
+              <h2 class="font-display font-bold text-sm text-zinc-800">Tagesbilanz</h2>
+              <button type="button" onclick="openSettingsModal()" class="text-[10px] font-semibold text-zinc-400 hover:text-mint-700 underline">Ziele</button>
+            </div>
             <span id="diary-protein-pill" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-coral-50 text-coral-600">Protein offen</span>
           </div>
 
           <div class="flex items-center gap-4">
-            <!-- Großer runder Kalorien-Fortschrittsring (SVG) -->
             <div class="relative flex items-center justify-center shrink-0">
               <svg class="w-36 h-36 -rotate-90" viewBox="0 0 132 132">
                 <circle cx="66" cy="66" r="55" fill="none" stroke="#F4F4F5" stroke-width="11" />
@@ -211,37 +212,43 @@
               </div>
             </div>
 
-            <!-- Drei Makro-Fortschrittsbalken -->
             <div id="diary-macro-bars" class="flex-1 space-y-2.5 min-w-0"></div>
           </div>
 
-          <!-- Aktivitätskalorien & Schnell-Hinzufügen -->
-          <div class="bg-offwhite rounded-2xl px-3 py-2 border border-zinc-200/70 flex items-center justify-between gap-2 text-xs">
-            <span class="font-semibold text-zinc-600 flex items-center gap-1.5">
-              <i data-lucide="flame" class="w-4 h-4 text-coral-500"></i>
-              <span>Aktivität: <strong id="diary-active-label" class="text-coral-600">0 kcal</strong></span>
-            </span>
-            <div class="flex items-center gap-1">
-              <button type="button" onclick="addActivityCalories(150)" class="px-2 py-1 rounded-lg bg-white hover:bg-coral-50 border border-zinc-200 text-[11px] font-bold text-zinc-700 transition">+150</button>
-              <button type="button" onclick="addActivityCalories(300)" class="px-2 py-1 rounded-lg bg-coral-50 hover:bg-coral-100 text-[11px] font-bold text-coral-600 transition">+300</button>
-              <button type="button" onclick="resetActivityCalories()" title="Zurücksetzen" class="p-1 text-zinc-400 hover:text-zinc-700">
-                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
-              </button>
+          <!-- Aktivitätskalorien & Gericht-Foto-Schnellstart -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div class="bg-offwhite rounded-2xl px-3 py-2 border border-zinc-200/70 flex items-center justify-between gap-1.5 text-xs">
+              <span class="font-semibold text-zinc-600 flex items-center gap-1 truncate">
+                <i data-lucide="flame" class="w-3.5 h-3.5 text-coral-500 shrink-0"></i>
+                <span>Aktiv: <strong id="diary-active-label" class="text-coral-600">0</strong></span>
+              </span>
+              <div class="flex items-center gap-1 shrink-0">
+                <button type="button" onclick="addActivityCalories(150)" class="px-1.5 py-0.5 rounded-lg bg-white hover:bg-coral-50 border border-zinc-200 text-[10px] font-bold text-zinc-700">+150</button>
+                <button type="button" onclick="addActivityCalories(300)" class="px-1.5 py-0.5 rounded-lg bg-coral-50 hover:bg-coral-100 text-[10px] font-bold text-coral-600">+300</button>
+                <button type="button" onclick="resetActivityCalories()" title="Zurücksetzen" class="p-0.5 text-zinc-400 hover:text-zinc-700">
+                  <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                </button>
+              </div>
             </div>
+
+            <label class="bg-mint-50 hover:bg-mint-100/80 border border-mint-200 rounded-2xl px-3 py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-mint-800 cursor-pointer transition">
+              <i data-lucide="camera" class="w-4 h-4 text-mint-600 shrink-0"></i>
+              <span class="truncate">Gericht fotografieren (KI)</span>
+              <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleMealPhotoScan(event)" />
+            </label>
           </div>
         </div>
 
-        <!-- 4 Mahlzeiten-Karten (Frühstück, Mittagessen, Abendessen, Snacks) -->
+        <!-- 4 Mahlzeiten-Karten -->
         <div id="diary-meals-list" class="space-y-3"></div>
 
       </section>
 
       <!-- =================================================================== -->
-      <!-- TAB 2: VORRAT (GLIEDERUNG, MAKROS, 100g-NÄHRWERTE & REZEPT-AUSWAHL) -->
+      <!-- TAB 2: VORRAT                                                       -->
       <!-- =================================================================== -->
       <section id="tab-pantry" class="tab-panel space-y-4">
 
-        <!-- Vorrat Kopfkarte: Suche, Lagerort- & Makro-Filter, Hinzufügen -->
         <div class="bg-cardbg rounded-[24px] p-4 shadow-card border border-zinc-200/65 space-y-3">
           <div class="flex items-center justify-between gap-2">
             <div>
@@ -249,15 +256,14 @@
               <p id="pantry-stats-subtitle" class="text-[11px] text-zinc-400">Automatisch nach Lagerort & Makros gegliedert</p>
             </div>
             <div class="flex items-center gap-1.5">
-              <button
-                type="button"
-                onclick="reclassifyAllPantry()"
-                title="Alle Artikel per KI oder Nährwert-Logik neu einordnen"
-                class="h-9 px-2.5 rounded-xl bg-offwhite hover:bg-mint-50 border border-zinc-200 text-zinc-700 hover:text-mint-700 text-xs font-bold flex items-center gap-1 transition"
+              <label
+                title="Zutaten, Einkauf oder Kassenzettel per Foto scannen"
+                class="h-9 px-2.5 rounded-xl bg-coral-50 hover:bg-coral-100 border border-coral-200 text-coral-600 text-xs font-bold flex items-center gap-1 cursor-pointer transition"
               >
-                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-mint-600"></i>
-                <span>Einordnen</span>
-              </button>
+                <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                <span>Foto-Scan</span>
+                <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleIngredientsPhotoScan(event, 'pantry')" />
+              </label>
               <button
                 type="button"
                 onclick="openAddPantryModal()"
@@ -298,13 +304,12 @@
           <div id="pantry-macro-chips" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar"></div>
         </div>
 
-        <!-- Vorratskarten -->
         <div id="pantry-cards-container" class="space-y-3.5"></div>
 
       </section>
 
       <!-- =================================================================== -->
-      <!-- TAB 3: REZEPTE (SUCHE, VOLL-EDITOR & INTELLIGENTER REZEPT-GENERATOR) -->
+      <!-- TAB 3: REZEPTE                                                      -->
       <!-- =================================================================== -->
       <section id="tab-recipes" class="tab-panel space-y-4">
 
@@ -315,14 +320,24 @@
               <h2 class="font-display font-bold text-base text-zinc-800">Rezepte</h2>
               <p class="text-[11px] text-zinc-400">Auch direkt in der Tagebuch-Suche auswählbar</p>
             </div>
-            <button
-              type="button"
-              onclick="openRecipeEditorModal(null, [])"
-              class="h-9 px-3 rounded-xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition"
-            >
-              <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>Eigenes Rezept</span>
-            </button>
+            <div class="flex items-center gap-1.5">
+              <label
+                title="Zutaten-Foto in Rezept umwandeln (KI)"
+                class="h-9 px-2.5 rounded-xl bg-coral-50 hover:bg-coral-100 border border-coral-200 text-coral-600 text-xs font-bold flex items-center gap-1 cursor-pointer transition"
+              >
+                <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                <span>Zutaten-Foto</span>
+                <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleIngredientsPhotoScan(event, 'recipe')" />
+              </label>
+              <button
+                type="button"
+                onclick="openRecipeEditorModal(null, [])"
+                class="h-9 px-3 rounded-xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition"
+              >
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Eigenes</span>
+              </button>
+            </div>
           </div>
 
           <div class="relative">
@@ -361,13 +376,20 @@
             </div>
             <select id="gen-style-select" class="bg-offwhite border border-zinc-200 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold text-zinc-700 outline-none">
               <option value="Abwechslungsreich">Stil: Abwechslungsreich</option>
-              <option value="Pfanne & Wok">Pfanne & Wok</option>
-              <option value="Frische Bowl">Frische Bowl</option>
+              <option value="Schnell & einfach">Schnell &amp; einfach</option>
+              <option value="Herzhaft">Herzhaft</option>
+              <option value="Süß & Frühstück">Süß &amp; Frühstück</option>
+              <option value="Bowl & Pfanne">Bowl &amp; Pfanne</option>
               <option value="Ofengericht">Ofengericht</option>
-              <option value="Frühstück & Süß">Frühstück & Süß</option>
-              <option value="Schnell unter 15 Min.">Schnell (&lt; 15 Min.)</option>
             </select>
           </div>
+
+          <input
+            id="gen-wish-input"
+            type="text"
+            placeholder="Optionaler Wunsch (z. B. warmes Abendessen, kalte Schüssel, proteinreich)..."
+            class="w-full bg-offwhite border border-zinc-200 focus:border-mint-500 focus:bg-white rounded-2xl px-3 py-2 text-xs outline-none transition"
+          />
 
           <!-- Modus-Umschalter: Nur aus dem Vorrat vs. Auch zukaufen -->
           <div class="grid grid-cols-2 gap-1.5 bg-offwhite p-1 rounded-2xl border border-zinc-200/80 text-xs">
@@ -411,11 +433,12 @@
             </button>
             <button
               type="button"
+              id="btn-generate-ai-recipe"
               onclick="generateIntelligentRecipe()"
               class="py-2.5 px-3 rounded-2xl bg-coral-500 hover:bg-coral-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition"
             >
               <i data-lucide="sparkles" class="w-3.5 h-3.5 shrink-0"></i>
-              <span>KI-Rezept entwerfen</span>
+              <span>Neue Idee / KI-Rezept</span>
             </button>
           </div>
         </div>
@@ -442,35 +465,44 @@
             </button>
           </div>
 
-          <div class="grid grid-cols-5 gap-2">
+          <div class="grid grid-cols-12 gap-2">
             <input
               id="shop-qty-input"
               type="text"
               placeholder="Menge"
-              class="col-span-2 bg-offwhite border border-zinc-200 focus:border-mint-500 focus:bg-white rounded-2xl px-3 py-2.5 text-xs outline-none"
+              class="col-span-4 bg-offwhite border border-zinc-200 focus:border-mint-500 focus:bg-white rounded-2xl px-3 py-2.5 text-xs outline-none"
             />
             <input
               id="shop-name-input"
               type="text"
               placeholder="Artikel (z. B. Haferdrink)"
-              class="col-span-3 bg-offwhite border border-zinc-200 focus:border-mint-500 focus:bg-white rounded-2xl px-3 py-2.5 text-xs outline-none"
+              class="col-span-8 bg-offwhite border border-zinc-200 focus:border-mint-500 focus:bg-white rounded-2xl px-3 py-2.5 text-xs outline-none"
               onkeydown="if(event.key==='Enter') addNewShoppingItem()"
             />
           </div>
 
-          <button type="button" onclick="addNewShoppingItem()" class="w-full py-2.5 rounded-2xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
-            <i data-lucide="plus" class="w-4 h-4"></i>
-            <span>Auf Einkaufsliste setzen</span>
-          </button>
+          <div class="grid grid-cols-12 gap-2">
+            <select id="shop-category-select" class="col-span-6 bg-offwhite border border-zinc-200 rounded-2xl px-3 py-2.5 text-xs font-semibold text-zinc-700 outline-none">
+              <option value="Frische & Kühlung">Frische &amp; Kühlung</option>
+              <option value="Obst & Gemüse">Obst &amp; Gemüse</option>
+              <option value="Trockenwaren & Konserven">Trockenwaren &amp; Konserven</option>
+              <option value="Nüsse, Öle & Gewürze">Nüsse, Öle &amp; Gewürze</option>
+              <option value="Sonstiges">Sonstiges</option>
+            </select>
+            <button type="button" onclick="addNewShoppingItem()" class="col-span-6 py-2.5 rounded-2xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Hinzufügen</span>
+            </button>
+          </div>
         </div>
 
         <div class="bg-cardbg rounded-[24px] p-4 shadow-card border border-zinc-200/65 space-y-3">
-          <div id="shopping-list-rows" class="divide-y divide-zinc-100 text-xs"></div>
+          <div id="shopping-list-rows" class="space-y-3 text-xs"></div>
 
           <div id="shopping-actions-footer" class="hidden pt-2 border-t border-zinc-100 flex gap-2">
             <button type="button" onclick="moveCheckedToPantry()" class="flex-1 py-2.5 px-3 rounded-2xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
               <i data-lucide="package-plus" class="w-4 h-4"></i>
-              <span>Abgehakte in den Vorrat übernehmen</span>
+              <span>Erledigte in Vorrat übernehmen</span>
             </button>
             <button type="button" onclick="deleteCheckedShoppingItems()" class="py-2.5 px-3 rounded-2xl bg-offwhite hover:bg-zinc-200/70 text-zinc-700 text-xs font-semibold transition">
               Löschen
@@ -487,7 +519,7 @@
     <!-- ===================================================================== -->
     <div id="pantry-floating-bar" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[480px] z-35 bg-zinc-900 text-white rounded-[24px] p-3.5 shadow-2xl border border-zinc-700/80 space-y-2">
       <div class="flex items-center justify-between text-xs px-1">
-        <span id="pantry-floating-label" class="font-display font-bold text-mint-400">2 Vorratsartikel gewählt</span>
+        <span id="pantry-floating-label" class="font-display font-bold text-mint-400">2 Artikel gewählt</span>
         <button type="button" onclick="clearPantryMultiSelection()" class="text-[11px] text-zinc-400 hover:text-white underline">
           Auswahl aufheben
         </button>
@@ -499,7 +531,7 @@
           class="py-2.5 px-3 rounded-2xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition"
         >
           <i data-lucide="utensils" class="w-3.5 h-3.5 shrink-0"></i>
-          <span>Auswahl als eigenes Rezept anlegen</span>
+          <span>Als eigenes Rezept anlegen</span>
         </button>
         <button
           type="button"
@@ -542,15 +574,14 @@
     <div id="sp-toast" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl max-w-[90%] text-center"></div>
 
     <!-- ===================================================================== -->
-    <!-- MODAL 1: TAGEBUCH HINZUFÜGEN-MODAL (SUCHE, BARCODE, VERPACKUNGS-SCAN, -->
-    <!-- MEINE PRODUKTE, BAUKASTEN & g (100) / PORTION (1) UMSCHALTER)         -->
+    <!-- MODAL 1: TAGEBUCH HINZUFÜGEN-MODAL                                    -->
     <!-- ===================================================================== -->
     <div id="diary-add-modal" class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4">
       <div class="bg-white w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-[24px] p-5 space-y-3.5 shadow-2xl">
         <div class="flex items-center justify-between gap-2">
           <div>
             <h3 class="font-display font-bold text-base text-zinc-800">Mahlzeit erfassen</h3>
-            <p class="text-[11px] text-zinc-400">Rezepte, Meine Produkte, Vorrat & Produktdatenbank</p>
+            <p class="text-[11px] text-zinc-400">Rezepte, Meine Produkte, Vorrat, Foto-Scan &amp; Datenbank</p>
           </div>
           <button type="button" onclick="closeDiaryAddModal()" class="w-8 h-8 rounded-full bg-offwhite flex items-center justify-center text-zinc-600">
             <i data-lucide="x" class="w-4 h-4"></i>
@@ -626,7 +657,7 @@
             <input
               id="dadd-search-input"
               type="text"
-              placeholder="Rezept (z. B. Cornflakes-Schüssel), Vorrat oder Produkt..."
+              placeholder="Rezept, Vorrat oder Produkt suchen..."
               oninput="handleDiaryModalLiveSearch(this.value)"
               onkeydown="if(event.key==='Enter') runFullOnlineFoodSearch()"
               class="w-full bg-offwhite border border-zinc-200 focus:border-mint-500 focus:bg-white rounded-2xl pl-9 pr-8 py-2.5 text-xs outline-none transition"
@@ -641,51 +672,51 @@
           </button>
         </div>
 
-        <!-- Schnellaktionen: Barcode, Verpackungs-Scan, Meine Produkte & Baukasten -->
+        <!-- Schnellaktionen: Gericht-Foto (KI), Barcode, Tabelle-Scan, Baukasten -->
         <div class="grid grid-cols-4 gap-1.5 text-[11px]">
-          <button type="button" onclick="openBarcodeScannerModal('diary')" class="py-2 px-1.5 rounded-2xl bg-offwhite hover:bg-mint-50 border border-zinc-200 text-zinc-700 font-semibold flex flex-col items-center gap-1 transition">
+          <label class="py-2 px-1 rounded-2xl bg-mint-50 hover:bg-mint-100 border border-mint-200 text-mint-800 font-bold flex flex-col items-center gap-1 cursor-pointer transition">
+            <i data-lucide="utensils-crossed" class="w-4 h-4 text-mint-600"></i>
+            <span class="truncate max-w-full">Gericht-Foto</span>
+            <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleMealPhotoScan(event)" />
+          </label>
+
+          <button type="button" onclick="openBarcodeScannerModal('diary')" class="py-2 px-1 rounded-2xl bg-offwhite hover:bg-mint-50 border border-zinc-200 text-zinc-700 font-semibold flex flex-col items-center gap-1 transition">
             <i data-lucide="scan-barcode" class="w-4 h-4 text-mint-600"></i>
             <span>Barcode</span>
           </button>
 
-          <label class="py-2 px-1.5 rounded-2xl bg-offwhite hover:bg-mint-50 border border-zinc-200 text-zinc-700 font-semibold flex flex-col items-center gap-1 cursor-pointer transition">
+          <label class="py-2 px-1 rounded-2xl bg-offwhite hover:bg-mint-50 border border-zinc-200 text-zinc-700 font-semibold flex flex-col items-center gap-1 cursor-pointer transition">
             <i data-lucide="camera" class="w-4 h-4 text-mint-600"></i>
             <span>Tabelle</span>
             <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleNutritionLabelScan(event)" />
           </label>
 
-          <button type="button" onclick="showMyProductsInDiaryModal()" class="py-2 px-1.5 rounded-2xl bg-offwhite hover:bg-mint-50 border border-zinc-200 text-zinc-700 font-semibold flex flex-col items-center gap-1 transition">
-            <i data-lucide="bookmark" class="w-4 h-4 text-mint-600"></i>
-            <span>Produkte</span>
-          </button>
-
-          <button type="button" onclick="openUnpackagedBuilderInModal()" class="py-2 px-1.5 rounded-2xl bg-coral-50 hover:bg-coral-100 border border-coral-200 text-coral-600 font-bold flex flex-col items-center gap-1 transition">
+          <button type="button" onclick="openUnpackagedBuilderInModal()" class="py-2 px-1 rounded-2xl bg-coral-50 hover:bg-coral-100 border border-coral-200 text-coral-600 font-bold flex flex-col items-center gap-1 transition">
             <i data-lucide="layers" class="w-4 h-4"></i>
             <span>Baukasten</span>
           </button>
         </div>
 
-        <!-- Suchergebnisse (Rezepte ganz oben!) -->
+        <!-- Suchergebnisse -->
         <div id="dadd-results-section" class="space-y-2">
           <div class="flex items-center justify-between">
-            <span id="dadd-results-heading" class="text-[11px] font-bold text-zinc-500">Gespeicherte Rezepte & Schnellauswahl</span>
-            <span id="dadd-loading-indicator" class="hidden text-[11px] font-semibold text-mint-700">Suche...</span>
+            <span id="dadd-results-heading" class="text-[11px] font-bold text-zinc-500">Gespeicherte Rezepte &amp; Schnellauswahl</span>
+            <span id="dadd-loading-indicator" class="hidden text-[11px] font-semibold text-mint-700">Lädt...</span>
           </div>
-          <div id="dadd-results-list" class="space-y-1.5 max-h-60 overflow-y-auto"></div>
+          <div id="dadd-results-list" class="space-y-1.5 max-h-56 overflow-y-auto"></div>
         </div>
 
-        <!-- Vorschau & Baukasten zum Prüfen, Anpassen und Bestätigen -->
+        <!-- Vorschau & editierbarer Baukasten -->
         <div id="dadd-builder-box" class="hidden bg-mint-50/75 border border-mint-200 rounded-2xl p-3.5 space-y-3 text-xs">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-mint-800">Mahlzeit / Zutaten prüfen & anpassen</span>
+            <span id="dadd-builder-title" class="font-bold text-mint-800">Mahlzeit / Zutaten prüfen &amp; anpassen</span>
             <button type="button" onclick="document.getElementById('dadd-builder-box').classList.add('hidden')" class="text-[11px] font-semibold text-zinc-500">Schließen</button>
           </div>
 
           <div id="dadd-builder-components" class="space-y-2"></div>
 
-          <!-- Weitere Zutat für unverpackte Kombinationen hinzufügen -->
           <div class="bg-white rounded-xl p-2 border border-mint-100 flex items-center gap-1.5">
-            <input id="dadd-extra-ing-name" type="text" placeholder="Weitere Zutat (z. B. Banane, Haferdrink)" class="flex-1 bg-offwhite border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[11px] outline-none" />
+            <input id="dadd-extra-ing-name" type="text" placeholder="Weitere Zutat (z. B. Banane, Haferdrink)" class="flex-1 bg-offwhite border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[11px] outline-none" onkeydown="if(event.key==='Enter') addExtraComponentToDiaryBuilder()" />
             <button type="button" onclick="addExtraComponentToDiaryBuilder()" class="px-3 py-1.5 rounded-lg bg-mint-500 text-white font-bold text-[11px] shrink-0">+ Zutat</button>
           </div>
 
@@ -713,6 +744,11 @@
             </div>
           </div>
 
+          <label class="flex items-center gap-2 text-[11px] font-semibold text-zinc-700 cursor-pointer">
+            <input id="dadd-deduct-pantry-chk" type="checkbox" class="w-4 h-4 accent-emerald-600 rounded" />
+            <span>Passende Zutaten automatisch vom Vorrat abziehen</span>
+          </label>
+
           <button type="button" onclick="confirmDiaryBuilderEntry()" class="w-full py-2.5 rounded-xl bg-mint-500 hover:bg-mint-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
             <i data-lucide="check" class="w-4 h-4"></i>
             <span>Ins Tagebuch eintragen</span>
@@ -733,21 +769,20 @@
     </div>
 
     <!-- ===================================================================== -->
-    <!-- MODAL 2: VORRAT HINZUFÜGEN & BEARBEITEN (INKL. 100g-NÄHRWERTE)        -->
+    <!-- MODAL 2: VORRAT HINZUFÜGEN & BEARBEITEN                               -->
     <!-- ===================================================================== -->
     <div id="pantry-item-modal" class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4">
       <div class="bg-white w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-[24px] p-5 space-y-3.5 shadow-2xl">
         <div class="flex items-center justify-between">
           <div>
             <h3 id="pmodal-title" class="font-display font-bold text-base text-zinc-800">Vorratsartikel</h3>
-            <p class="text-[11px] text-zinc-400">Automatische Lagerort- & Makro-Einordnung</p>
+            <p class="text-[11px] text-zinc-400">Automatische Lagerort- &amp; Makro-Einordnung</p>
           </div>
           <button type="button" onclick="closePantryItemModal()" class="w-8 h-8 rounded-full bg-offwhite flex items-center justify-center text-zinc-600">
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
         </div>
 
-        <!-- Online-/Barcode-Suche beim Neuanlegen -->
         <div id="pmodal-search-bar" class="space-y-2">
           <div class="flex items-center gap-2">
             <input
@@ -778,11 +813,11 @@
               <select id="pmodal-location" class="w-full bg-offwhite border border-zinc-200 rounded-xl px-2.5 py-2 outline-none">
                 <option value="Kühlschrank">Kühlschrank</option>
                 <option value="Tiefkühlfach">Tiefkühlfach</option>
-                <option value="Vorratsschrank & Konserven">Vorratsschrank & Konserven</option>
-                <option value="Trockenvorräte & Getreide">Trockenvorräte & Getreide</option>
-                <option value="Obst & Gemüse">Obst & Gemüse</option>
-                <option value="Öle, Nüsse & Samen">Öle, Nüsse & Samen</option>
-                <option value="Gewürze & Sonstiges">Gewürze & Sonstiges</option>
+                <option value="Vorratsschrank & Konserven">Vorratsschrank &amp; Konserven</option>
+                <option value="Trockenvorräte & Getreide">Trockenvorräte &amp; Getreide</option>
+                <option value="Obst & Gemüse">Obst &amp; Gemüse</option>
+                <option value="Öle, Nüsse & Samen">Öle, Nüsse &amp; Samen</option>
+                <option value="Gewürze & Sonstiges">Gewürze &amp; Sonstiges</option>
               </select>
             </div>
             <div>
@@ -791,7 +826,7 @@
                 <option value="Proteinquelle">Proteinquelle</option>
                 <option value="Kohlenhydratquelle">Kohlenhydratquelle</option>
                 <option value="Fettquelle">Fettquelle</option>
-                <option value="Nüsse, Kerne & Samen">Nüsse, Kerne & Samen</option>
+                <option value="Nüsse, Kerne & Samen">Nüsse, Kerne &amp; Samen</option>
                 <option value="Gemüse / Obst">Gemüse / Obst</option>
                 <option value="Ausgewogen / Mischprodukt">Ausgewogen / Mischprodukt</option>
               </select>
@@ -813,7 +848,6 @@
             </div>
           </div>
 
-          <!-- Nährwerte pro 100 g -->
           <div class="bg-offwhite rounded-2xl p-3 border border-zinc-200 space-y-2">
             <div class="flex items-center justify-between">
               <span class="font-bold text-zinc-700">Nährwerte pro 100 g / 100 ml</span>
@@ -849,14 +883,14 @@
     </div>
 
     <!-- ===================================================================== -->
-    <!-- MODAL 3: VOLLSTÄNDIGER REZEPT-EDITOR (NEU, AUS VORRAT & BEARBEITEN)   -->
+    <!-- MODAL 3: VOLLSTÄNDIGER REZEPT-EDITOR                                  -->
     <!-- ===================================================================== -->
     <div id="recipe-editor-modal" class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4">
       <div class="bg-white w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-[24px] p-5 space-y-3.5 shadow-2xl">
         <div class="flex items-center justify-between">
           <div>
             <h3 id="recedit-heading" class="font-display font-bold text-base text-zinc-800">Rezept bearbeiten</h3>
-            <p class="text-[11px] text-zinc-400">Zutaten aus Vorrat wählen, Gramm anpassen & live berechnen</p>
+            <p class="text-[11px] text-zinc-400">Zutaten aus Vorrat wählen, Mengen anpassen &amp; live berechnen</p>
           </div>
           <button type="button" onclick="closeRecipeEditorModal()" class="w-8 h-8 rounded-full bg-offwhite flex items-center justify-center text-zinc-600">
             <i data-lucide="x" class="w-4 h-4"></i>
@@ -899,10 +933,10 @@
             <div id="recedit-pantry-chips" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto"></div>
           </div>
 
-          <!-- Zutatenliste mit Gramm-Anpassung -->
+          <!-- Zutatenliste mit Mengenanpassung -->
           <div class="bg-offwhite rounded-2xl p-3 border border-zinc-200 space-y-2">
             <div class="flex items-center justify-between">
-              <span class="font-bold text-zinc-800">Zutaten & Mengen</span>
+              <span class="font-bold text-zinc-800">Zutaten &amp; Mengen</span>
               <span id="recedit-total-kcal-label" class="text-[11px] font-bold text-mint-700">Gesamt: 0 kcal</span>
             </div>
             <div id="recedit-ingredients-container" class="space-y-1.5"></div>
@@ -951,7 +985,37 @@
     </div>
 
     <!-- ===================================================================== -->
-    <!-- MODAL 4: TAGEBUCHEINTRAG BEARBEITEN                                   -->
+    <!-- MODAL 4: KI-FOTO-SCAN VORSCHAU (ZUTATEN / EINKAUF / KASSENZETTEL)     -->
+    <!-- ===================================================================== -->
+    <div id="photo-ingredients-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4">
+      <div class="bg-white w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-[24px] p-5 space-y-3.5 shadow-2xl">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-display font-bold text-base text-zinc-800">Erkannte Zutaten aus Foto</h3>
+            <p id="piscan-subtitle" class="text-[11px] text-zinc-400">Prüfe die erkannten Einträge vor der Übernahme</p>
+          </div>
+          <button type="button" onclick="closePhotoIngredientsModal()" class="w-8 h-8 rounded-full bg-offwhite flex items-center justify-center text-zinc-600">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div id="piscan-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button type="button" onclick="applyScannedIngredientsToPantry()" class="py-3 px-3 rounded-2xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+            <i data-lucide="archive" class="w-4 h-4"></i>
+            <span>In Vorrat übernehmen</span>
+          </button>
+          <button type="button" onclick="applyScannedIngredientsToRecipeEditor()" class="py-3 px-3 rounded-2xl bg-coral-500 hover:bg-coral-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+            <i data-lucide="utensils" class="w-4 h-4"></i>
+            <span>Als Rezept öffnen</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 5: TAGEBUCHEINTRAG BEARBEITEN                                   -->
     <!-- ===================================================================== -->
     <div id="diary-edit-modal" class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
       <div class="bg-white w-full max-w-sm rounded-[24px] p-5 space-y-3.5 shadow-2xl">
@@ -1010,7 +1074,7 @@
     </div>
 
     <!-- ===================================================================== -->
-    <!-- MODAL 5: BARCODE-SCANNER                                              -->
+    <!-- MODAL 6: BARCODE-SCANNER (HTML5-QRCODE + MANUELLE EINGABE)            -->
     <!-- ===================================================================== -->
     <div id="barcode-scanner-modal" class="hidden fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
       <div class="bg-white w-full max-w-sm rounded-[24px] p-5 space-y-4 shadow-2xl">
@@ -1024,25 +1088,25 @@
           </button>
         </div>
 
-        <div class="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-[170px] flex items-center justify-center">
-          <video id="barcode-video" class="hidden w-full h-44 object-cover" playsinline muted></video>
-          <div id="barcode-status-text" class="text-xs text-zinc-300 text-center px-4 py-8">Kamera wird vorbereitet...</div>
+        <div class="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-[180px] flex items-center justify-center">
+          <div id="qr-reader" class="w-full"></div>
+          <div id="barcode-status-text" class="text-xs text-zinc-300 text-center px-4 py-8">Kamera wird gestartet...</div>
         </div>
 
         <div class="flex gap-2 text-xs">
-          <input id="barcode-code-input" type="text" inputmode="numeric" placeholder="EAN / Barcode-Nummer" class="flex-1 bg-offwhite border border-zinc-200 rounded-xl px-3 py-2 font-mono outline-none" onkeydown="if(event.key==='Enter') lookupBarcodeProduct(this.value)" />
+          <input id="barcode-code-input" type="text" inputmode="numeric" placeholder="EAN / Barcode-Nummer (z. B. 4008400404127)" class="flex-1 bg-offwhite border border-zinc-200 rounded-xl px-3 py-2 font-mono outline-none" onkeydown="if(event.key==='Enter') lookupBarcodeProduct(this.value)" />
           <button type="button" onclick="lookupBarcodeProduct(document.getElementById('barcode-code-input').value)" class="px-4 py-2 rounded-xl bg-mint-500 text-white font-bold">Suchen</button>
         </div>
       </div>
     </div>
 
     <!-- ===================================================================== -->
-    <!-- MODAL 6: DATENSICHERUNG (JSON EXPORT/IMPORT), ZIELE & GEMINI API-KEY  -->
+    <!-- MODAL 7: DATENSICHERUNG (JSON EXPORT/IMPORT), ZIELE & GEMINI API-KEY  -->
     <!-- ===================================================================== -->
     <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4">
       <div class="bg-white w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-[24px] p-5 space-y-4 shadow-2xl">
         <div class="flex items-center justify-between">
-          <h3 class="font-display font-bold text-base text-zinc-800">Backup & Einstellungen</h3>
+          <h3 class="font-display font-bold text-base text-zinc-800">Backup, Ziele &amp; KI-Schlüssel</h3>
           <button type="button" onclick="closeSettingsModal()" class="w-8 h-8 rounded-full bg-offwhite flex items-center justify-center text-zinc-600">
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
@@ -1051,10 +1115,10 @@
         <!-- JSON Export & Import -->
         <div class="bg-mint-50/75 rounded-2xl p-3.5 border border-mint-200 space-y-2.5 text-xs">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-mint-900">Datensicherung (JSON Export & Import)</span>
+            <span class="font-bold text-mint-900">Datensicherung (JSON Export &amp; Import)</span>
             <span id="backup-counts-pill" class="text-[10px] font-bold text-mint-700"></span>
           </div>
-          <p class="text-[11px] text-mint-800">Sichere deinen kompletten Vorrat, Tagebuch, Rezepte und Produkte zur sicheren Übertragung.</p>
+          <p class="text-[11px] text-mint-800">Exportiere deinen gesamten Vorrat, Tagebuch, Rezepte und eigene Produkte als Datei zur sicheren Übertragung.</p>
           <div class="grid grid-cols-2 gap-2">
             <button type="button" onclick="exportAllDataJson()" class="py-2.5 px-3 rounded-xl bg-mint-500 hover:bg-mint-600 text-white font-bold flex items-center justify-center gap-1.5 transition">
               <i data-lucide="download" class="w-4 h-4"></i>
@@ -1070,10 +1134,14 @@
 
         <!-- Optionaler Gemini API Key -->
         <div class="bg-offwhite rounded-2xl p-3.5 border border-zinc-200 space-y-2 text-xs">
-          <label for="settings-api-key" class="font-bold text-zinc-800 block">Gemini API-Key (optional für KI-Rezepte & Foto-Scan)</label>
+          <div class="flex items-center justify-between">
+            <label for="settings-api-key" class="font-bold text-zinc-800">Gemini API-Key (optional für Foto-Scan &amp; KI)</label>
+            <span id="settings-key-status" class="text-[10px] font-semibold text-zinc-400"></span>
+          </div>
           <input id="settings-api-key" type="password" placeholder="AIza..." class="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 font-mono outline-none focus:border-mint-500" />
           <div class="flex gap-2">
-            <button type="button" onclick="saveSettingsApiKey()" class="flex-1 py-2 rounded-xl bg-zinc-900 text-white font-bold">Key speichern</button>
+            <button type="button" onclick="saveSettingsApiKey()" class="flex-1 py-2 rounded-xl bg-zinc-900 text-white font-bold">Speichern</button>
+            <button type="button" onclick="testSettingsApiKey()" class="px-3 py-2 rounded-xl bg-mint-50 border border-mint-200 text-mint-800 font-bold">Testen</button>
             <button type="button" onclick="clearSettingsApiKey()" class="px-3 py-2 rounded-xl bg-white border border-zinc-200 text-coral-600 font-semibold">Löschen</button>
           </div>
         </div>
@@ -1108,8 +1176,17 @@
 
   <script>
     // =========================================================================
-    // 1. PERSISTENZ & MIGRATION BESTEHENDER LOCALSTORAGE-SCHLÜSSEL
+    // 1. SICHERHEITS-HELFER (HTML-ESCAPING & STORAGE MIT IN-MEMORY FALLBACK)
     // =========================================================================
+    function esc(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
     const STORAGE_KEYS = {
       DIARY: "sp_diary",
       PANTRY: "sp_pantry",
@@ -1231,7 +1308,7 @@
     function detectStorageLocation(name) {
       const s = String(name || "").toLowerCase();
       if (/tiefkühl|tk-|gefroren|beerenmix|eis\b/.test(s)) return "Tiefkühlfach";
-      if (/hähnchen|huhn|pute|fleisch|rind|schwein|fisch|lachs|garnelen|ei\b|eier|joghurt|skyr|topfen|quark|milch|käse|butter|tofu|tempeh|wurst|schinken|hummus|aufstrich|frisch/.test(s)) {
+      if (/hähnchen|hühner|huhn|pute|fleisch|rind|schwein|fisch|lachs|garnelen|ei\b|eier|joghurt|skyr|topfen|quark|milch|käse|butter|tofu|tempeh|wurst|schinken|hummus|aufstrich|frisch/.test(s)) {
         return "Kühlschrank";
       }
       if (/apfel|äpfel|banane|birne|orange|beere|erdbeer|blaubeer|himbeer|traube|mango|zitrone|limette|avocado|brokkoli|paprika|tomate|gurke|zucchini|karotte|möhre|zwiebel|knoblauch|spinat|salat|champignon|pilz|kartoffel|süßkartoffel/.test(s)) {
@@ -1278,7 +1355,7 @@
         return "Ausgewogen / Mischprodukt";
       }
 
-      if (/hähnchen|huhn|pute|rind|lachs|thunfisch|fisch|ei\b|eier|skyr|topfen|quark|tofu|proteinpulver/.test(s)) return "Proteinquelle";
+      if (/hähnchen|hühner|huhn|pute|rind|lachs|thunfisch|fisch|ei\b|eier|skyr|topfen|quark|tofu|proteinpulver/.test(s)) return "Proteinquelle";
       if (/öl|butter|avocado|kokosmilch/.test(s)) return "Fettquelle";
       if (/reis|cornflakes|hafer|nudel|pasta|brot|kartoffel|müsli|banane|apfel/.test(s)) return "Kohlenhydratquelle";
       return "Ausgewogen / Mischprodukt";
@@ -1309,11 +1386,13 @@
       { name: "Kürbiskerne", keys: ["kürbiskerne", "kerne", "sonnenblumenkerne"], portionGrams: 20, portionLabel: "2 EL", kcal100: 559, pro100: 25.0, carb100: 14.0, fat100: 46.0 }
     ];
 
+    let state = null;
+
     function findReferenceNutrition(label) {
       const q = String(label || "").toLowerCase().trim();
       if (!q) return { name: "Lebensmittel", portionGrams: 100, portionLabel: "1 Portion", kcal100: 150, pro100: 8, carb100: 18, fat100: 5 };
 
-      if (typeof state !== "undefined") {
+      if (state) {
         const pHit = (state.pantry || []).find(p => p.name.toLowerCase() === q || p.name.toLowerCase().includes(q) || q.includes(p.name.toLowerCase()));
         if (pHit) {
           return {
@@ -1371,13 +1450,13 @@
       }
 
       return {
-        id: raw.id || (Date.now() + Math.floor(Math.random() * 10000)),
-        name: raw.name || "Artikel",
+        id: Number(raw.id) || (Date.now() + Math.floor(Math.random() * 10000)),
+        name: String(raw.name || "Artikel"),
         storageLocation: loc,
         category: cat,
         amount: Number(raw.amount) || 0,
         minAmount: Number(raw.minAmount) || 100,
-        unit: raw.unit || "g",
+        unit: String(raw.unit || "g"),
         portionGrams: Number(raw.portionGrams) || ref.portionGrams || 100,
         kcal100: Math.round(kcal100 * 10) / 10,
         protein100: Math.round(protein100 * 10) / 10,
@@ -1447,7 +1526,7 @@
           }
         ],
         shopping: [
-          { id: 101, amount: "1 Liter", name: "Haferdrink", checked: false }
+          { id: 101, amount: "1 Liter", name: "Haferdrink", category: "Frische & Kühlung", checked: false }
         ],
         products: []
       };
@@ -1471,16 +1550,23 @@
         diary: diary && typeof diary === "object" ? diary : def.diary,
         pantry: Array.isArray(rawPantry) ? rawPantry.map(normalizePantryItem) : def.pantry,
         recipes: Array.isArray(rawRecipes)
-          ? rawRecipes.map(r => ({ ...r, servings: Number(r.servings) || 1, isCustom: r.isCustom !== undefined ? Boolean(r.isCustom) : true }))
+          ? rawRecipes.map(r => ({
+              ...r,
+              id: String(r.id || `rec-${Date.now()}-${Math.random()}`),
+              servings: Number(r.servings) || 1,
+              isCustom: r.isCustom !== undefined ? Boolean(r.isCustom) : true
+            }))
           : def.recipes,
-        shopping: Array.isArray(shopping) ? shopping : def.shopping,
+        shopping: Array.isArray(shopping)
+          ? shopping.map(s => ({ category: "Sonstiges", ...s }))
+          : def.shopping,
         products: Array.isArray(products) ? products : def.products,
         goals: { ...DEFAULT_GOALS, ...(goals || {}) },
         settings: { apiKey: "", ...(settings || {}) }
       };
     }
 
-    let state = loadAllState();
+    state = loadAllState();
     let currentTodayKey = toIsoDateKey();
     let selectedDiaryDateKey = currentTodayKey;
 
@@ -1512,7 +1598,7 @@
       el.textContent = text;
       el.classList.remove("hidden");
       clearTimeout(toastTimeout);
-      toastTimeout = setTimeout(() => el.classList.add("hidden"), 2500);
+      toastTimeout = setTimeout(() => el.classList.add("hidden"), 2800);
     }
 
     function updateHeaderMeta() {
@@ -1526,7 +1612,7 @@
       }
       const badge = document.getElementById("header-ai-badge");
       if (badge) {
-        if (state.settings.apiKey) {
+        if ((state.settings.apiKey || "").trim()) {
           badge.textContent = "KI aktiv";
           badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-mint-50 text-mint-700 shrink-0";
         } else {
@@ -1555,8 +1641,72 @@
     }
 
     // =========================================================================
-    // 4. GEMINI API HELFER
+    // 4. CLIENTSEITIGE BILDKOMPRIMIERUNG & GEMINI API MIT MODELL-FALLBACK
     // =========================================================================
+    function compressImageFileToJpeg(file, maxDimension = 1024, quality = 0.82) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("FILE_READ_ERROR"));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => {
+            const raw = String(reader.result || "");
+            resolve({ data: raw.split(",")[1] || "", mime: file.type || "image/jpeg" });
+          };
+          img.onload = () => {
+            try {
+              let w = img.width || 800;
+              let h = img.height || 800;
+              if (w > maxDimension || h > maxDimension) {
+                if (w >= h) {
+                  h = Math.round((h * maxDimension) / w);
+                  w = maxDimension;
+                } else {
+                  w = Math.round((w * maxDimension) / h);
+                  h = maxDimension;
+                }
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img, 0, 0, w, h);
+              const dataUrl = canvas.toDataURL("image/jpeg", quality);
+              resolve({ data: dataUrl.split(",")[1] || "", mime: "image/jpeg" });
+            } catch (err) {
+              const raw = String(reader.result || "");
+              resolve({ data: raw.split(",")[1] || "", mime: file.type || "image/jpeg" });
+            }
+          };
+          img.src = String(reader.result || "");
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function extractAndParseJson(rawText) {
+      const cleaned = String(rawText || "")
+        .replace(/```json\s*/gi, "")
+        .replace(/```\s*/g, "")
+        .trim();
+      try {
+        return JSON.parse(cleaned);
+      } catch (e) {
+        const startObj = cleaned.indexOf("{");
+        const endObj = cleaned.lastIndexOf("}");
+        if (startObj >= 0 && endObj > startObj) {
+          return JSON.parse(cleaned.slice(startObj, endObj + 1));
+        }
+        throw e;
+      }
+    }
+
+    const GEMINI_FALLBACK_MODELS = [
+      "gemini-3.5-flash-lite",
+      "gemini-3.8-flash",
+      "gemini-2.5-flash"
+    ];
+
     async function callGeminiJson(prompt, schema, imageBase64 = null, imageMime = "image/jpeg") {
       const key = (state.settings.apiKey || "").trim();
       if (!key) throw new Error("NO_API_KEY");
@@ -1568,25 +1718,40 @@
       const body = {
         contents: [{ role: "user", parts }],
         systemInstruction: {
-          parts: [{ text: "Du bist ein präziser Küchen- und Ernährungsassistent für Smart Pantry. Antworte stets auf Deutsch und achte auf kulinarisch sinnvolle Kombinationen." }]
+          parts: [{ text: "Du bist ein präziser Küchen- und Ernährungsassistent für Smart Pantry. Antworte stets auf Deutsch und liefere realistische Nährwerte." }]
         },
         generationConfig: {
-          temperature: 0.5,
+          temperature: 0.45,
           responseMimeType: "application/json",
           responseSchema: schema
         }
       };
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) throw new Error(`HTTP_${res.status}`);
-      const data = await res.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
-      if (!rawText) throw new Error("EMPTY");
-      return JSON.parse(rawText);
+      let lastErr = new Error("API_FAILED");
+      for (const model of GEMINI_FALLBACK_MODELS) {
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) {
+            lastErr = new Error(`HTTP_${res.status}`);
+            if (res.status === 400 || res.status === 401 || res.status === 403) break;
+            continue;
+          }
+          const data = await res.json();
+          const rawText = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
+          if (!rawText) {
+            lastErr = new Error("EMPTY");
+            continue;
+          }
+          return extractAndParseJson(rawText);
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr;
     }
 
     // =========================================================================
@@ -1629,7 +1794,7 @@
     }
 
     // =========================================================================
-    // 6. TAB 1: TAGEBUCH (WOCHENKALENDER, RING, MAKROS & MAHLZEITEN-KARTEN)
+    // 6. TAB 1: TAGEBUCH
     // =========================================================================
     const WEEKDAY_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
     const MONTH_SHORT = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
@@ -1816,7 +1981,7 @@
                   <div class="py-2 flex items-center justify-between gap-2 text-xs">
                     <div class="min-w-0">
                       <p class="font-semibold text-zinc-800 truncate">
-                        ${item.name} ${item.amount ? `<span class="text-zinc-400 font-normal">· ${item.amount}</span>` : ""}
+                        ${esc(item.name)} ${item.amount ? `<span class="text-zinc-400 font-normal">· ${esc(item.amount)}</span>` : ""}
                       </p>
                       <p class="text-[10px] text-zinc-400">
                         <span class="text-coral-600 font-semibold">${Math.round((Number(item.protein) || 0) * 10) / 10}g P</span> · ${Math.round((Number(item.carbs) || 0) * 10) / 10}g KH · ${Math.round((Number(item.fat) || 0) * 10) / 10}g F
@@ -1824,10 +1989,10 @@
                     </div>
                     <div class="flex items-center gap-1 shrink-0">
                       <span class="font-bold text-zinc-800 mr-1">${Math.round(Number(item.calories) || 0)} kcal</span>
-                      <button type="button" onclick="openDiaryEditModal('${item.id}')" aria-label="Bearbeiten" class="text-zinc-400 hover:text-mint-600 p-1">
+                      <button type="button" onclick="openDiaryEditModal('${esc(item.id)}')" aria-label="Bearbeiten" class="text-zinc-400 hover:text-mint-600 p-1">
                         <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                       </button>
-                      <button type="button" onclick="deleteDiaryEntry('${item.id}')" aria-label="Löschen" class="text-zinc-300 hover:text-coral-600 p-1">
+                      <button type="button" onclick="deleteDiaryEntry('${esc(item.id)}')" aria-label="Löschen" class="text-zinc-300 hover:text-coral-600 p-1">
                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                       </button>
                     </div>
@@ -1851,17 +2016,20 @@
     }
 
     // =========================================================================
-    // 7. HINZUFÜGEN-MODAL IM TAGEBUCH (KOMBINIERTE SUCHE, g vs PORTION, BAUKASTEN)
+    // 7. TAGEBUCH HINZUFÜGEN-MODAL (KOMBINIERTE SUCHE, g/PORTION, BAUKASTEN)
     // =========================================================================
     let modalInputUnit = "g";
     let diarySearchPool = [];
     let diaryBuilderComponents = [];
+    let liveSearchDebounceTimer = null;
+    let onlineSearchAbortCtrl = null;
 
     function openDiaryAddModal(meal = "Mittagessen") {
       document.getElementById("dadd-meal-select").value = meal;
       document.getElementById("dadd-search-input").value = "";
       document.getElementById("dadd-clear-search").classList.add("hidden");
       document.getElementById("dadd-builder-box").classList.add("hidden");
+      document.getElementById("dadd-deduct-pantry-chk").checked = false;
       setDiaryModalUnit("g");
       handleDiaryModalLiveSearch("");
       document.getElementById("diary-add-modal").classList.remove("hidden");
@@ -1869,6 +2037,7 @@
     }
 
     function closeDiaryAddModal() {
+      if (onlineSearchAbortCtrl) onlineSearchAbortCtrl.abort();
       document.getElementById("diary-add-modal").classList.add("hidden");
     }
 
@@ -2010,25 +2179,13 @@
 
       diarySearchPool = [...recipeMatches, ...productMatches, ...pantryMatches, ...refMatches];
       renderDiarySearchPool();
-    }
 
-    function showMyProductsInDiaryModal() {
-      const items = (state.products || []).map(p => ({
-        kind: "food",
-        badge: "Mein Produkt",
-        badgeStyle: "bg-mint-50 text-mint-700 border-mint-200",
-        name: p.name,
-        sub: `${p.portionLabel || "1 Portion"} (${p.portionGrams || 100} g)`,
-        portionGrams: Number(p.portionGrams) || 100,
-        portionLabel: p.portionLabel || "1 Portion",
-        kcal100: Number(p.kcal100) || 0,
-        pro100: Number(p.protein100) || 0,
-        carb100: Number(p.carbs100) || 0,
-        fat100: Number(p.fat100) || 0
-      }));
-      document.getElementById("dadd-results-heading").textContent = `Meine Produkte (${items.length})`;
-      diarySearchPool = items;
-      renderDiarySearchPool();
+      clearTimeout(liveSearchDebounceTimer);
+      if (q.length >= 3 && !/^\d{8,14}$/.test(q)) {
+        liveSearchDebounceTimer = setTimeout(() => {
+          runFullOnlineFoodSearch(true);
+        }, 420);
+      }
     }
 
     function renderDiarySearchPool() {
@@ -2058,10 +2215,10 @@
           <button type="button" onclick="pickDiarySearchResult(${idx})" class="w-full text-left bg-offwhite hover:bg-mint-50 border ${item.kind === "recipe" ? "border-coral-200" : "border-zinc-200"} hover:border-mint-400 rounded-2xl p-2.5 flex items-center justify-between gap-2 transition">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5 mb-0.5">
-                <span class="text-[9px] font-bold px-2 py-0.5 rounded-full border ${item.badgeStyle}">${item.badge}</span>
-                <p class="font-bold text-xs text-zinc-800 truncate">${item.name}</p>
+                <span class="text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${item.badgeStyle}">${esc(item.badge)}</span>
+                <p class="font-bold text-xs text-zinc-800 truncate">${esc(item.name)}</p>
               </div>
-              <p class="text-[10px] text-zinc-500 truncate">${item.sub}</p>
+              <p class="text-[10px] text-zinc-500 truncate">${esc(item.sub)}</p>
             </div>
             <div class="text-right shrink-0">
               <span class="text-xs font-extrabold text-mint-700 block">${kcal} kcal</span>
@@ -2072,10 +2229,10 @@
       }).join("");
     }
 
-    async function runFullOnlineFoodSearch() {
+    async function runFullOnlineFoodSearch(silent = false) {
       const q = document.getElementById("dadd-search-input").value.trim();
       if (!q) {
-        showToast("Bitte Suchbegriff eingeben");
+        if (!silent) showToast("Bitte Suchbegriff eingeben");
         return;
       }
       if (/^\d{8,14}$/.test(q)) {
@@ -2084,14 +2241,16 @@
         return;
       }
 
-      handleDiaryModalLiveSearch(q);
-      const localBase = [...diarySearchPool];
+      if (onlineSearchAbortCtrl) onlineSearchAbortCtrl.abort();
+      onlineSearchAbortCtrl = new AbortController();
+
+      const localBase = diarySearchPool.filter(x => x.badge !== "Open Food Facts");
       const loader = document.getElementById("dadd-loading-indicator");
       loader.classList.remove("hidden");
 
       try {
         const url = `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=12&fields=product_name,product_name_de,brands,nutriments,serving_size,serving_quantity`;
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: onlineSearchAbortCtrl.signal });
         const data = await res.json();
         const offItems = (data.products || [])
           .filter(p => (p.product_name_de || p.product_name || "").trim().length > 0 && p.nutriments?.["energy-kcal_100g"] !== undefined)
@@ -2119,7 +2278,9 @@
         document.getElementById("dadd-results-heading").textContent = `Alle Treffer (${diarySearchPool.length})`;
         renderDiarySearchPool();
       } catch (e) {
-        showToast("Online-Suche momentan nicht erreichbar");
+        if (e.name !== "AbortError" && !silent) {
+          showToast("Online-Suche momentan nicht erreichbar");
+        }
       } finally {
         loader.classList.add("hidden");
       }
@@ -2297,7 +2458,7 @@
         return `
           <div class="bg-white rounded-xl p-2 border border-mint-100 flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
-              <span class="font-bold text-zinc-800 block truncate">${c.name}</span>
+              <span class="font-bold text-zinc-800 block truncate">${esc(c.name)}</span>
               <span class="text-[10px] text-zinc-400">${Math.round(c.kcal)} kcal · ${Math.round(c.protein * 10) / 10}g P</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -2334,6 +2495,18 @@
       if (!name) {
         showToast("Bitte Bezeichnung angeben");
         return;
+      }
+
+      if (document.getElementById("dadd-deduct-pantry-chk")?.checked) {
+        diaryBuilderComponents.forEach(c => {
+          const pMatch = state.pantry.find(p => p.name.toLowerCase() === c.name.toLowerCase() || p.name.toLowerCase().includes(c.name.toLowerCase()));
+          if (pMatch) {
+            const deduct = pMatch.unit === "Stück"
+              ? Math.max(1, Math.round((Number(c.grams) || 60) / (Number(pMatch.portionGrams) || 60)))
+              : (Number(c.grams) || 0);
+            pMatch.amount = Math.max(0, Math.round((pMatch.amount - deduct) * 10) / 10);
+          }
+        });
       }
 
       const day = getDiaryDay(selectedDiaryDateKey);
@@ -2405,21 +2578,108 @@
       showToast("In Meine Produkte gespeichert");
     }
 
+    // =========================================================================
+    // 8. KI-FOTO-SCANS (GERICHT-SCHÄTZUNG, VERPACKUNGSTABELLE & ZUTATEN-SCAN)
+    // =========================================================================
+    async function handleMealPhotoScan(event) {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+      event.target.value = "";
+
+      if (!(state.settings.apiKey || "").trim()) {
+        showToast("Bitte zuerst Gemini API-Key unter Backup & KI hinterlegen");
+        openSettingsModal();
+        return;
+      }
+
+      if (document.getElementById("diary-add-modal").classList.contains("hidden")) {
+        openDiaryAddModal("Mittagessen");
+      }
+
+      const loader = document.getElementById("dadd-loading-indicator");
+      loader.classList.remove("hidden");
+      showToast("KI analysiert das Gericht auf dem Foto...");
+
+      try {
+        const compressed = await compressImageFileToJpeg(file, 1024, 0.82);
+        const parsed = await callGeminiJson(
+          "Analysiere das fotografierte Gericht/Essen. Benenne das Gericht auf Deutsch, schätze das realistische Gewicht (in Gramm) jeder sichtbaren Teller-Komponente sowie deren Nährwerte pro 100 g.",
+          {
+            type: "OBJECT",
+            properties: {
+              dishName: { type: "STRING" },
+              components: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    name: { type: "STRING" },
+                    grams: { type: "NUMBER" },
+                    kcal100: { type: "NUMBER" },
+                    pro100: { type: "NUMBER" },
+                    carb100: { type: "NUMBER" },
+                    fat100: { type: "NUMBER" }
+                  },
+                  required: ["name", "grams", "kcal100", "pro100", "carb100", "fat100"]
+                }
+              }
+            },
+            required: ["dishName", "components"]
+          },
+          compressed.data,
+          compressed.mime
+        );
+
+        const comps = (parsed.components || []).map(c => {
+          const grams = Math.max(5, Math.round(Number(c.grams) || 100));
+          const fac = grams / 100;
+          return {
+            name: c.name || "Komponente",
+            unitMode: "g",
+            qty: grams,
+            portionGrams: grams,
+            portionLabel: "1 Portion",
+            grams,
+            kcal100: Number(c.kcal100) || 0,
+            pro100: Number(c.pro100) || 0,
+            carb100: Number(c.carb100) || 0,
+            fat100: Number(c.fat100) || 0,
+            kcal: (Number(c.kcal100) || 0) * fac,
+            protein: (Number(c.pro100) || 0) * fac,
+            carbs: (Number(c.carb100) || 0) * fac,
+            fat: (Number(c.fat100) || 0) * fac
+          };
+        });
+
+        if (comps.length === 0) throw new Error("NO_COMPONENTS");
+        diaryBuilderComponents = comps;
+        const totalGrams = comps.reduce((s, x) => s + x.grams, 0);
+        openDiaryBuilderPanel(`${Math.round(totalGrams)} g (KI-Schätzung)`, parsed.dishName || "Fotografiertes Gericht");
+        showToast("Gericht erkannt – Mengen bei Bedarf anpassen");
+      } catch (e) {
+        showToast("Gericht konnte nicht analysiert werden (API-Key / Netz prüfen)");
+      } finally {
+        loader.classList.add("hidden");
+      }
+    }
+
     async function handleNutritionLabelScan(event) {
       const file = event.target?.files?.[0];
       if (!file) return;
       event.target.value = "";
 
-      if (!state.settings.apiKey) {
-        showToast("Bitte zuerst Gemini API-Key im Backup/Einstellungen hinterlegen");
-        openSettingsModal("general");
+      if (!(state.settings.apiKey || "").trim()) {
+        showToast("Bitte zuerst Gemini API-Key unter Backup & KI hinterlegen");
+        openSettingsModal();
         return;
       }
 
       const loader = document.getElementById("dadd-loading-indicator");
       loader.classList.remove("hidden");
+      showToast("Nährwerttabelle wird ausgelesen...");
+
       try {
-        const b64 = await readFileAsBase64(file);
+        const compressed = await compressImageFileToJpeg(file, 1024, 0.85);
         const parsed = await callGeminiJson(
           "Lies Produktname, Portionsgröße (in Gramm) und Nährwerte pro 100g aus diesem Foto der Nährwerttabelle aus.",
           {
@@ -2434,8 +2694,8 @@
             },
             required: ["name", "kcal100", "pro100", "carb100", "fat100"]
           },
-          b64.data,
-          b64.mime
+          compressed.data,
+          compressed.mime
         );
 
         const pGrams = Number(parsed.portionGrams) || 100;
@@ -2460,11 +2720,163 @@
           fat: parsed.fat100 * fac
         }];
         openDiaryBuilderPanel(calc.formatted, parsed.name || "Gescanntes Produkt");
+        showToast("Nährwerttabelle erkannt");
       } catch (e) {
         showToast("Nährwerttabelle konnte nicht ausgelesen werden");
       } finally {
         loader.classList.add("hidden");
       }
+    }
+
+    let scannedIngredientsBuffer = [];
+    let scannedIngredientsOrigin = "pantry";
+
+    async function handleIngredientsPhotoScan(event, origin = "pantry") {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+      event.target.value = "";
+      scannedIngredientsOrigin = origin;
+
+      if (!(state.settings.apiKey || "").trim()) {
+        showToast("Bitte zuerst Gemini API-Key unter Backup & KI hinterlegen");
+        openSettingsModal();
+        return;
+      }
+
+      showToast("KI erkennt Lebensmittel & Zutaten auf dem Foto...");
+      try {
+        const compressed = await compressImageFileToJpeg(file, 1024, 0.82);
+        const parsed = await callGeminiJson(
+          `Erkenne alle Lebensmittel/Zutaten auf diesem Foto (Einkauf, Kühlschrank, Zutatenliste oder Kassenzettel).
+Liefere für jedes Produkt: Name auf Deutsch, geschätzte Menge, Einheit ("g", "ml" oder "Stück"), geschätzte 100g-Nährwerte, besten Lagerort aus [${STORAGE_LOCATIONS.join(", ")}] und Makro-Kategorie aus [${MACRO_CATEGORIES.join(", ")}].`,
+          {
+            type: "OBJECT",
+            properties: {
+              items: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    name: { type: "STRING" },
+                    amount: { type: "NUMBER" },
+                    unit: { type: "STRING" },
+                    kcal100: { type: "NUMBER" },
+                    protein100: { type: "NUMBER" },
+                    carbs100: { type: "NUMBER" },
+                    fat100: { type: "NUMBER" },
+                    storageLocation: { type: "STRING" },
+                    category: { type: "STRING" }
+                  },
+                  required: ["name", "amount", "unit", "kcal100", "protein100", "carbs100", "fat100"]
+                }
+              }
+            },
+            required: ["items"]
+          },
+          compressed.data,
+          compressed.mime
+        );
+
+        scannedIngredientsBuffer = (parsed.items || []).map(it => ({
+          selected: true,
+          ...normalizePantryItem({
+            name: it.name,
+            amount: Number(it.amount) || 250,
+            unit: it.unit || "g",
+            kcal100: it.kcal100,
+            protein100: it.protein100,
+            carbs100: it.carbs100,
+            fat100: it.fat100,
+            storageLocation: it.storageLocation,
+            category: it.category
+          })
+        }));
+
+        if (scannedIngredientsBuffer.length === 0) {
+          showToast("Keine eindeutigen Lebensmittel auf dem Foto erkannt");
+          return;
+        }
+
+        renderPhotoIngredientsModal();
+        document.getElementById("photo-ingredients-modal").classList.remove("hidden");
+        if (window.lucide) lucide.createIcons();
+      } catch (e) {
+        showToast("Foto-Scan fehlgeschlagen (API-Key oder Verbindung prüfen)");
+      }
+    }
+
+    function renderPhotoIngredientsModal() {
+      const list = document.getElementById("piscan-list");
+      const sub = document.getElementById("piscan-subtitle");
+      if (sub) sub.textContent = `${scannedIngredientsBuffer.length} Lebensmittel erkannt`;
+
+      list.innerHTML = scannedIngredientsBuffer.map((item, idx) => `
+        <div class="bg-offwhite rounded-2xl p-3 border ${item.selected ? "border-mint-400" : "border-zinc-200"} space-y-2 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+              <input type="checkbox" ${item.selected ? "checked" : ""} onchange="scannedIngredientsBuffer[${idx}].selected = this.checked" class="w-4 h-4 accent-emerald-600 rounded" />
+              <input type="text" value="${esc(item.name)}" onchange="scannedIngredientsBuffer[${idx}].name = this.value" class="font-bold text-zinc-800 bg-transparent border-b border-transparent focus:border-mint-500 outline-none flex-1 min-w-0" />
+            </label>
+            <div class="flex items-center gap-1 shrink-0">
+              <input type="number" step="any" value="${item.amount}" onchange="scannedIngredientsBuffer[${idx}].amount = parseFloat(this.value) || 0" class="w-16 bg-white border border-zinc-200 rounded-lg px-2 py-1 text-right font-bold outline-none" />
+              <span class="text-[11px] font-semibold text-zinc-500 w-9">${esc(item.unit)}</span>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-zinc-500">
+            <span>${esc(item.storageLocation)} · ${esc(item.category)}</span>
+            <span>${Math.round(item.kcal100)} kcal · P ${item.protein100}g</span>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function closePhotoIngredientsModal() {
+      document.getElementById("photo-ingredients-modal").classList.add("hidden");
+    }
+
+    function applyScannedIngredientsToPantry() {
+      const chosen = scannedIngredientsBuffer.filter(i => i.selected && i.name.trim());
+      if (chosen.length === 0) {
+        showToast("Bitte mindestens einen Eintrag anhaken");
+        return;
+      }
+
+      chosen.forEach(item => {
+        const existing = state.pantry.find(p => p.name.toLowerCase() === item.name.trim().toLowerCase());
+        if (existing) {
+          existing.amount = Math.round((existing.amount + item.amount) * 10) / 10;
+        } else {
+          state.pantry.unshift(normalizePantryItem({ ...item, id: Date.now() + Math.floor(Math.random() * 10000) }));
+        }
+      });
+
+      persistAllState();
+      closePhotoIngredientsModal();
+      renderPantryTab();
+      showToast(`${chosen.length} Artikel in den Vorrat übernommen`);
+    }
+
+    function applyScannedIngredientsToRecipeEditor() {
+      const chosen = scannedIngredientsBuffer.filter(i => i.selected && i.name.trim());
+      if (chosen.length === 0) {
+        showToast("Bitte mindestens eine Zutat anhaken");
+        return;
+      }
+
+      const ingredients = chosen.map(c => ({
+        name: c.name,
+        amount: c.amount,
+        unit: c.unit,
+        kcal100: c.kcal100,
+        pro100: c.protein100,
+        carb100: c.carbs100,
+        fat100: c.fat100,
+        portionGrams: c.portionGrams || 100
+      }));
+
+      closePhotoIngredientsModal();
+      switchTab("recipes");
+      openRecipeEditorModal(null, ingredients, chosen.slice(0, 2).map(x => x.name).join(" & "));
     }
 
     function openDiaryEditModal(id) {
@@ -2506,7 +2918,7 @@
     }
 
     // =========================================================================
-    // 8. TAB 2: VORRAT (LAGERORTE, MAKROS, 100g-NÄHRWERTE & REZEPT-MEHRFACHAUSWAHL)
+    // 9. TAB 2: VORRAT
     // =========================================================================
     let pantryLocationFilter = "Alle";
     let pantryMacroFilter = "Alle";
@@ -2543,7 +2955,7 @@
 
       if (bar && lbl && isPantryTab && selectedPantryIds.length > 0) {
         bar.classList.remove("hidden");
-        lbl.textContent = `${selectedPantryIds.length} ${selectedPantryIds.length === 1 ? "Artikel" : "Artikel"} ausgewählt`;
+        lbl.textContent = `${selectedPantryIds.length} Artikel gewählt`;
       } else if (bar) {
         bar.classList.add("hidden");
       }
@@ -2597,17 +3009,17 @@
       const locChips = document.getElementById("pantry-location-chips");
       const locations = ["Alle", ...STORAGE_LOCATIONS];
       locChips.innerHTML = locations.map(loc => `
-        <button type="button" onclick="setPantryLocationFilter('${loc}')" class="text-[11px] font-semibold px-3 py-1.5 rounded-full shrink-0 border transition ${
+        <button type="button" onclick="setPantryLocationFilter('${esc(loc)}')" class="text-[11px] font-semibold px-3 py-1.5 rounded-full shrink-0 border transition ${
           pantryLocationFilter === loc ? "bg-mint-500 text-white border-mint-500" : "bg-offwhite text-zinc-700 border-zinc-200"
-        }">${loc}</button>
+        }">${esc(loc)}</button>
       `).join("");
 
       const macChips = document.getElementById("pantry-macro-chips");
       const macros = ["Alle", ...MACRO_CATEGORIES];
       macChips.innerHTML = macros.map(cat => `
-        <button type="button" onclick="setPantryMacroFilter('${cat}')" class="text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0 border transition ${
+        <button type="button" onclick="setPantryMacroFilter('${esc(cat)}')" class="text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0 border transition ${
           pantryMacroFilter === cat ? "bg-zinc-900 text-white border-zinc-900" : "bg-offwhite text-zinc-600 border-zinc-200"
-        }">${cat}</button>
+        }">${esc(cat)}</button>
       `).join("");
 
       const q = (document.getElementById("pantry-search-input")?.value || "").trim().toLowerCase();
@@ -2635,7 +3047,7 @@
               <div class="flex items-center justify-between px-1">
                 <h3 class="font-display font-bold text-xs text-zinc-700 flex items-center gap-1.5">
                   <span class="w-2 h-2 rounded-full bg-mint-500"></span>
-                  <span>${loc}</span>
+                  <span>${esc(loc)}</span>
                 </h3>
                 <span class="text-[10px] font-bold text-zinc-400">${items.length}</span>
               </div>
@@ -2678,17 +3090,17 @@
               </button>
 
               <div class="min-w-0">
-                <h4 class="font-display font-bold text-sm text-zinc-800 truncate">${item.name}</h4>
+                <h4 class="font-display font-bold text-sm text-zinc-800 truncate">${esc(item.name)}</h4>
                 <div class="flex items-center gap-1.5 flex-wrap mt-1">
-                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">${item.storageLocation}</span>
-                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${macStyle}">${item.category}</span>
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">${esc(item.storageLocation)}</span>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${macStyle}">${esc(item.category)}</span>
                 </div>
               </div>
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
               <button type="button" onclick="adjustPantryQty(${item.id}, -50)" class="w-7 h-7 rounded-xl bg-offwhite hover:bg-zinc-200/70 font-bold text-xs text-zinc-700">-</button>
-              <span class="min-w-[54px] text-center text-xs font-extrabold text-mint-700">${item.amount} ${item.unit}</span>
+              <span class="min-w-[54px] text-center text-xs font-extrabold text-mint-700">${item.amount} ${esc(item.unit)}</span>
               <button type="button" onclick="adjustPantryQty(${item.id}, 50)" class="w-7 h-7 rounded-xl bg-offwhite hover:bg-zinc-200/70 font-bold text-xs text-zinc-700">+</button>
             </div>
           </div>
@@ -2743,58 +3155,6 @@
       persistAllState();
       renderPantryTab();
       showToast("Vorratsartikel gelöscht");
-    }
-
-    async function reclassifyAllPantry() {
-      if (state.pantry.length === 0) return;
-
-      if (state.settings.apiKey) {
-        showToast("KI ordnet Lagerorte & Kategorien ein...");
-        try {
-          const payload = state.pantry.map(p => ({ id: p.id, name: p.name, kcal100: p.kcal100, protein100: p.protein100, carbs100: p.carbs100, fat100: p.fat100 }));
-          const res = await callGeminiJson(
-            `Ordne jedem Vorratsartikel den besten Lagerort aus [${STORAGE_LOCATIONS.join(", ")}] und die Makro-Kategorie aus [${MACRO_CATEGORIES.join(", ")}] zu.\nArtikel: ${JSON.stringify(payload)}`,
-            {
-              type: "OBJECT",
-              properties: {
-                items: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      id: { type: "NUMBER" },
-                      storageLocation: { type: "STRING" },
-                      category: { type: "STRING" }
-                    },
-                    required: ["id", "storageLocation", "category"]
-                  }
-                }
-              },
-              required: ["items"]
-            }
-          );
-          (res.items || []).forEach(mapped => {
-            const p = state.pantry.find(x => x.id === mapped.id);
-            if (p) {
-              if (STORAGE_LOCATIONS.includes(mapped.storageLocation)) p.storageLocation = mapped.storageLocation;
-              if (MACRO_CATEGORIES.includes(mapped.category)) p.category = mapped.category;
-            }
-          });
-          persistAllState();
-          renderPantryTab();
-          showToast("KI-Einordnung abgeschlossen");
-          return;
-        } catch (e) {}
-      }
-
-      state.pantry = state.pantry.map(item => ({
-        ...item,
-        storageLocation: detectStorageLocation(item.name),
-        category: detectMacroCategory(item.name, item)
-      }));
-      persistAllState();
-      renderPantryTab();
-      showToast("Lagerorte & Kategorien aktualisiert");
     }
 
     let pantryModalOffHits = [];
@@ -2893,7 +3253,7 @@
           const n = p.nutriments || {};
           return `
             <button type="button" onclick="applyOffHitToPantryModal(${idx})" class="w-full text-left bg-offwhite hover:bg-mint-50 border border-zinc-200 rounded-xl p-2 flex items-center justify-between text-xs">
-              <span class="font-bold truncate">${name}</span>
+              <span class="font-bold truncate">${esc(name)}</span>
               <span class="text-mint-700 font-bold shrink-0">${Math.round(Number(n["energy-kcal_100g"]) || 0)} kcal</span>
             </button>
           `;
@@ -2956,7 +3316,7 @@
     }
 
     // =========================================================================
-    // 9. TAB 3: REZEPTE (SUCHE, VOLL-EDITOR & INTELLIGENTER REZEPT-GENERATOR)
+    // 10. TAB 3: REZEPTE (SUCHE, VOLL-EDITOR & INTELLIGENTER REZEPT-GENERATOR)
     // =========================================================================
     let activeRecipeFilter = "all";
     let genPickedPantryIds = [];
@@ -3027,8 +3387,8 @@
               active ? "bg-mint-500 text-white border-mint-500" : "bg-offwhite text-zinc-700 border-zinc-200 hover:bg-zinc-200/60"
             }"
           >
-            <span class="truncate">${p.name}</span>
-            <span class="text-[10px] shrink-0 ${active ? "text-mint-100" : "text-zinc-400"}">${p.amount}${p.unit === "Stück" ? "x" : p.unit}</span>
+            <span class="truncate">${esc(p.name)}</span>
+            <span class="text-[10px] shrink-0 ${active ? "text-mint-100" : "text-zinc-400"}">${p.amount}${p.unit === "Stück" ? "x" : esc(p.unit)}</span>
           </button>
         `;
       }).join("");
@@ -3109,7 +3469,7 @@
             added ? "bg-mint-500 text-white border-mint-500" : "bg-white hover:bg-mint-100/70 text-zinc-700 border-mint-200"
           }">
             <i data-lucide="${added ? "check" : "plus"}" class="w-3 h-3"></i>
-            <span>${p.name}</span>
+            <span>${esc(p.name)}</span>
           </button>
         `;
       }).join("");
@@ -3152,11 +3512,11 @@
         return `
           <div class="bg-white rounded-xl p-2 border border-zinc-200 flex items-center justify-between gap-1.5">
             <div class="min-w-0 flex-1">
-              <span class="font-bold text-zinc-800 block truncate">${ing.name}</span>
+              <span class="font-bold text-zinc-800 block truncate">${esc(ing.name)}</span>
               <span class="text-[10px] text-zinc-400">${Math.round((ing.kcal100 || 0) * fac)} kcal · ${Math.round((ing.pro100 || 0) * fac * 10) / 10}g P</span>
             </div>
             <input type="number" step="any" value="${ing.amount}" oninput="updateRecipeEditorIngAmt(${idx}, this.value)" class="w-16 bg-offwhite rounded-lg px-2 py-1 text-right font-bold text-xs outline-none" />
-            <span class="text-[11px] text-zinc-500 w-8">${ing.unit || "g"}</span>
+            <span class="text-[11px] text-zinc-500 w-8">${esc(ing.unit || "g")}</span>
             <button type="button" onclick="removeRecipeEditorIng(${idx})" class="text-zinc-300 hover:text-coral-600 p-1">
               <i data-lucide="x" class="w-3.5 h-3.5"></i>
             </button>
@@ -3308,23 +3668,23 @@
                   <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${rec.isCustom ? "bg-coral-50 text-coral-600" : "bg-zinc-100 text-zinc-600"}">
                     ${rec.isCustom ? "Eigenes Rezept" : "KI-Vorschlag"}
                   </span>
-                  <span class="text-[11px] font-semibold text-zinc-400">${rec.mealType || "Mahlzeit"} · ${rec.time}</span>
+                  <span class="text-[11px] font-semibold text-zinc-400">${esc(rec.mealType || "Mahlzeit")} · ${esc(rec.time)}</span>
                 </div>
-                <h3 class="font-display font-bold text-base text-zinc-800 mt-1.5">${rec.title}</h3>
+                <h3 class="font-display font-bold text-base text-zinc-800 mt-1.5">${esc(rec.title)}</h3>
               </div>
 
               <div class="flex items-center gap-1 shrink-0">
-                <button type="button" onclick="openRecipeEditorModal('${rec.id}')" title="Rezept bearbeiten" class="p-2 rounded-full bg-offwhite hover:bg-mint-50 text-zinc-600 hover:text-mint-700 transition">
+                <button type="button" onclick="openRecipeEditorModal('${esc(rec.id)}')" title="Rezept bearbeiten" class="p-2 rounded-full bg-offwhite hover:bg-mint-50 text-zinc-600 hover:text-mint-700 transition">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </button>
-                <button type="button" onclick="deleteRecipeItem('${rec.id}')" title="Löschen" class="p-2 rounded-full hover:bg-coral-50 text-zinc-300 hover:text-coral-600 transition">
+                <button type="button" onclick="deleteRecipeItem('${esc(rec.id)}')" title="Löschen" class="p-2 rounded-full hover:bg-coral-50 text-zinc-300 hover:text-coral-600 transition">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </div>
             </div>
 
             ${rec.culinaryNote ? `
-              <div class="bg-fat-50 border border-amber-200 rounded-2xl px-3 py-2 text-[11px] text-amber-800">${rec.culinaryNote}</div>
+              <div class="bg-fat-50 border border-amber-200 rounded-2xl px-3 py-2 text-[11px] text-amber-800">${esc(rec.culinaryNote)}</div>
             ` : ""}
 
             <div class="bg-offwhite rounded-2xl px-3 py-2 flex items-center justify-between text-xs font-bold">
@@ -3338,8 +3698,8 @@
                 const ok = match && match.amount >= ing.amount;
                 return `
                   <div class="flex items-center justify-between">
-                    <span class="${ok ? "text-zinc-700" : "text-coral-600 font-semibold"}">${ing.amount} ${ing.unit} ${ing.name}</span>
-                    <span class="text-[10px] font-semibold ${ok ? "text-mint-700" : "text-coral-500"}">${ok ? `Vorrat: ${match.amount}${match.unit}` : "Fehlt"}</span>
+                    <span class="${ok ? "text-zinc-700" : "text-coral-600 font-semibold"}">${ing.amount} ${esc(ing.unit)} ${esc(ing.name)}</span>
+                    <span class="text-[10px] font-semibold ${ok ? "text-mint-700" : "text-coral-500"}">${ok ? `Vorrat: ${match.amount}${esc(match.unit)}` : "Fehlt"}</span>
                   </div>
                 `;
               }).join("")}
@@ -3348,17 +3708,17 @@
             <details class="bg-offwhite rounded-2xl p-2.5 border border-zinc-200/60 text-xs">
               <summary class="cursor-pointer font-semibold text-zinc-700">Zubereitung</summary>
               <ol class="list-decimal list-inside space-y-1 mt-2 text-zinc-600">
-                ${(rec.steps || []).map(s => `<li>${s}</li>`).join("")}
+                ${(rec.steps || []).map(s => `<li>${esc(s)}</li>`).join("")}
               </ol>
             </details>
 
             <div class="flex gap-2">
-              <button type="button" onclick="bookRecipeToDiary('${rec.id}')" class="flex-1 py-2.5 px-3 rounded-2xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+              <button type="button" onclick="bookRecipeToDiary('${esc(rec.id)}')" class="flex-1 py-2.5 px-3 rounded-2xl bg-mint-500 hover:bg-mint-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
                 <i data-lucide="notebook-pen" class="w-3.5 h-3.5"></i>
                 <span>Ins Tagebuch</span>
               </button>
               ${st.missing.length > 0 ? `
-                <button type="button" onclick="addMissingIngredientsToShopping('${rec.id}')" class="py-2.5 px-3 rounded-2xl bg-coral-50 hover:bg-coral-100 text-coral-600 text-xs font-bold flex items-center justify-center gap-1 transition">
+                <button type="button" onclick="addMissingIngredientsToShopping('${esc(rec.id)}')" class="py-2.5 px-3 rounded-2xl bg-coral-50 hover:bg-coral-100 text-coral-600 text-xs font-bold flex items-center justify-center gap-1 transition">
                   <i data-lucide="shopping-cart" class="w-3.5 h-3.5"></i>
                   <span>Fehlendes kaufen</span>
                 </button>
@@ -3406,6 +3766,7 @@
           id: Date.now() + Math.floor(Math.random() * 10000),
           amount: `${m.amount} ${m.unit}`,
           name: m.name,
+          category: "Frische & Kühlung",
           checked: false
         });
       });
@@ -3426,9 +3787,12 @@
         : available;
 
       const style = document.getElementById("gen-style-select")?.value || "Abwechslungsreich";
+      const wish = (document.getElementById("gen-wish-input")?.value || "").trim();
+      const genBtn = document.getElementById("btn-generate-ai-recipe");
       recipeVariationIndex++;
 
-      if (state.settings.apiKey) {
+      if ((state.settings.apiKey || "").trim()) {
+        if (genBtn) genBtn.disabled = true;
         showToast("KI entwirft passendes Rezept...");
         try {
           const modeInstruction = generatorMode === "pantry_only"
@@ -3436,7 +3800,7 @@
             : "Du darfst die gewählten Vorratszutaten um 1–3 sinnvolle frische Zutaten zum Zukaufen ergänzen.";
 
           const aiRec = await callGeminiJson(
-            `Entwirf ein kulinarisch stimmiges Rezept auf Deutsch (Variation #${recipeVariationIndex}, Stil: ${style}).
+            `Entwirf ein kulinarisch stimmiges Rezept auf Deutsch (Variation #${recipeVariationIndex}, Stil: ${style}${wish ? `, Wunsch: ${wish}` : ""}).
 Vermeide Wiederholungen dieser bestehenden Rezepte: ${state.recipes.map(r => r.title).join(", ")}.
 Bevorzugte Zutaten: ${chosen.map(c => c.name).join(", ")}.
 Gesamter Vorrat: ${available.map(a => `${a.name} (${a.amount}${a.unit})`).join(", ")}.
@@ -3481,7 +3845,11 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
           renderRecipesTab();
           showToast("Neues KI-Rezept erstellt");
           return;
-        } catch (e) {}
+        } catch (e) {
+          showToast("KI-Antwort nicht verfügbar – lokaler Entwurf wird erstellt");
+        } finally {
+          if (genBtn) genBtn.disabled = false;
+        }
       }
 
       // Kategoriengeprüfter lokaler Fallback (verhindert unpassende Kombinationen)
@@ -3571,7 +3939,7 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
     }
 
     // =========================================================================
-    // 10. TAB 4: EINKAUFSLISTE
+    // 11. TAB 4: EINKAUFSLISTE
     // =========================================================================
     function updateShoppingBadge() {
       const badge = document.getElementById("nav-shopping-badge");
@@ -3602,20 +3970,31 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
         return;
       }
 
-      rows.innerHTML = state.shopping.map(item => `
-        <div class="py-2.5 flex items-center justify-between gap-2">
-          <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
-            <input type="checkbox" ${item.checked ? "checked" : ""} onchange="toggleShoppingCheck(${item.id})" class="w-4 h-4 accent-emerald-600 rounded" />
-            <div class="min-w-0">
-              <span class="font-bold text-zinc-800 block truncate ${item.checked ? "line-through text-zinc-400" : ""}">${item.name}</span>
-              ${item.amount ? `<span class="text-[11px] text-zinc-400 block">${item.amount}</span>` : ""}
+      const categories = [...new Set(state.shopping.map(i => i.category || "Sonstiges"))];
+      rows.innerHTML = categories.map(cat => {
+        const items = state.shopping.filter(i => (i.category || "Sonstiges") === cat);
+        return `
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold uppercase tracking-wide text-zinc-400 block">${esc(cat)}</span>
+            <div class="divide-y divide-zinc-100">
+              ${items.map(item => `
+                <div class="py-2 flex items-center justify-between gap-2">
+                  <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                    <input type="checkbox" ${item.checked ? "checked" : ""} onchange="toggleShoppingCheck(${item.id})" class="w-4 h-4 accent-emerald-600 rounded" />
+                    <div class="min-w-0">
+                      <span class="font-bold text-zinc-800 block truncate ${item.checked ? "line-through text-zinc-400" : ""}">${esc(item.name)}</span>
+                      ${item.amount ? `<span class="text-[11px] text-zinc-400 block">${esc(item.amount)}</span>` : ""}
+                    </div>
+                  </label>
+                  <button type="button" onclick="deleteShoppingRow(${item.id})" class="text-zinc-300 hover:text-coral-600 p-1">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              `).join("")}
             </div>
-          </label>
-          <button type="button" onclick="deleteShoppingRow(${item.id})" class="text-zinc-300 hover:text-coral-600 p-1">
-            <i data-lucide="x" class="w-4 h-4"></i>
-          </button>
-        </div>
-      `).join("");
+          </div>
+        `;
+      }).join("");
 
       if (window.lucide) lucide.createIcons();
     }
@@ -3623,6 +4002,7 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
     function addNewShoppingItem() {
       const amt = document.getElementById("shop-qty-input").value.trim();
       const name = document.getElementById("shop-name-input").value.trim();
+      const category = document.getElementById("shop-category-select").value || "Sonstiges";
       if (!name) {
         showToast("Bitte Artikel eingeben");
         return;
@@ -3631,6 +4011,7 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
         id: Date.now(),
         amount: amt || "1 Stück",
         name,
+        category,
         checked: false
       });
       document.getElementById("shop-qty-input").value = "";
@@ -3666,6 +4047,7 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
             id: Date.now() + Math.floor(Math.random() * 10000),
             amount: `${Math.max(Number(item.minAmount) || 200, 200)} ${item.unit}`,
             name: item.name,
+            category: item.storageLocation === "Kühlschrank" ? "Frische & Kühlung" : "Trockenwaren & Konserven",
             checked: false
           });
         }
@@ -3704,7 +4086,7 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
       persistAllState();
       renderShoppingTab();
       renderPantryTab();
-      showToast("Abgehakte Artikel in den Vorrat übernommen");
+      showToast("Erledigte Artikel in den Vorrat übernommen");
     }
 
     function deleteCheckedShoppingItems() {
@@ -3714,68 +4096,60 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
     }
 
     // =========================================================================
-    // 11. BARCODE-SCANNER & HELFER
+    // 12. BARCODE-SCANNER (HTML5-QRCODE + MANUELLE EINGABE)
     // =========================================================================
     let barcodeTarget = "diary";
-    let barcodeStream = null;
-    let barcodeTimer = null;
+    let html5QrInstance = null;
 
     function openBarcodeScannerModal(target) {
       barcodeTarget = target;
       document.getElementById("barcode-code-input").value = "";
       document.getElementById("barcode-scanner-modal").classList.remove("hidden");
-      startBarcodeVideo();
+      startHtml5QrScanner();
       if (window.lucide) lucide.createIcons();
     }
 
     function closeBarcodeScannerModal() {
-      stopBarcodeVideo();
+      stopHtml5QrScanner();
       document.getElementById("barcode-scanner-modal").classList.add("hidden");
     }
 
-    async function startBarcodeVideo() {
-      const video = document.getElementById("barcode-video");
+    async function startHtml5QrScanner() {
       const msg = document.getElementById("barcode-status-text");
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        msg.textContent = "Kamera nicht verfügbar – Barcode-Nummer unten eingeben";
+      if (typeof Html5Qrcode === "undefined") {
+        msg.textContent = "Kamera-Bibliothek offline – EAN-Nummer unten eingeben";
+        msg.classList.remove("hidden");
         return;
       }
       try {
-        barcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        video.srcObject = barcodeStream;
-        await video.play();
-        video.classList.remove("hidden");
+        await stopHtml5QrScanner();
         msg.classList.add("hidden");
-
-        if ("BarcodeDetector" in window) {
-          const detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
-          barcodeTimer = setInterval(async () => {
-            try {
-              const codes = await detector.detect(video);
-              if (codes?.[0]?.rawValue) {
-                stopBarcodeVideo();
-                lookupBarcodeProduct(codes[0].rawValue);
-              }
-            } catch (e) {}
-          }, 450);
-        }
+        html5QrInstance = new Html5Qrcode("qr-reader");
+        await html5QrInstance.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 230, height: 110 } },
+          decodedText => {
+            stopHtml5QrScanner();
+            lookupBarcodeProduct(decodedText);
+          },
+          () => {}
+        );
       } catch (e) {
-        msg.textContent = "Kamerazugriff blockiert – Nummer unten eingeben";
+        msg.textContent = "Kamerazugriff nicht möglich – Barcode-Nummer unten eingeben";
+        msg.classList.remove("hidden");
       }
     }
 
-    function stopBarcodeVideo() {
-      if (barcodeTimer) clearInterval(barcodeTimer);
-      barcodeTimer = null;
-      if (barcodeStream) barcodeStream.getTracks().forEach(t => t.stop());
-      barcodeStream = null;
-      const video = document.getElementById("barcode-video");
-      const msg = document.getElementById("barcode-status-text");
-      if (video) {
-        video.srcObject = null;
-        video.classList.add("hidden");
+    async function stopHtml5QrScanner() {
+      if (html5QrInstance) {
+        try {
+          if (html5QrInstance.isScanning) {
+            await html5QrInstance.stop();
+          }
+          html5QrInstance.clear();
+        } catch (e) {}
+        html5QrInstance = null;
       }
-      if (msg) msg.classList.remove("hidden");
     }
 
     async function lookupBarcodeProduct(raw) {
@@ -3851,24 +4225,14 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
       return { portionGrams: 100, portionLabel: "1 Portion" };
     }
 
-    function readFileAsBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const str = String(reader.result || "");
-          resolve({ data: str.split(",")[1] || "", mime: file.type || "image/jpeg" });
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
     // =========================================================================
-    // 12. EINSTELLUNGEN & JSON-DATENSICHERUNG
+    // 13. EINSTELLUNGEN & JSON-DATENSICHERUNG
     // =========================================================================
     function openSettingsModal() {
       const pill = document.getElementById("backup-counts-pill");
       if (pill) pill.textContent = `${state.pantry.length} Vorräte · ${state.recipes.length} Rezepte`;
+      const st = document.getElementById("settings-key-status");
+      if (st) st.textContent = (state.settings.apiKey || "").trim() ? "Hinterlegt" : "Nicht gesetzt";
       document.getElementById("settings-api-key").value = state.settings.apiKey || "";
       document.getElementById("set-goal-kcal").value = String(state.goals.calories);
       document.getElementById("set-goal-pro").value = String(state.goals.protein);
@@ -3886,22 +4250,44 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
       state.settings.apiKey = document.getElementById("settings-api-key").value.trim();
       persistAllState();
       updateHeaderMeta();
+      const st = document.getElementById("settings-key-status");
+      if (st) st.textContent = state.settings.apiKey ? "Hinterlegt" : "Nicht gesetzt";
       showToast(state.settings.apiKey ? "Gemini API-Key gespeichert" : "API-Key entfernt");
     }
 
+    async function testSettingsApiKey() {
+      saveSettingsApiKey();
+      if (!state.settings.apiKey) {
+        showToast("Bitte zuerst API-Key eingeben");
+        return;
+      }
+      showToast("Teste Verbindung zur Gemini API...");
+      try {
+        await callGeminiJson(
+          "Antworte mit ok: true.",
+          { type: "OBJECT", properties: { ok: { type: "BOOLEAN" } }, required: ["ok"] }
+        );
+        showToast("Gemini API-Key funktioniert einwandfrei!");
+      } catch (e) {
+        showToast("API-Key ungültig oder Kontingent erschöpft");
+      }
+    }
+
     function clearSettingsApiKey() {
-      document.getElementById("settings-api-key").value = "";
       state.settings.apiKey = "";
+      document.getElementById("settings-api-key").value = "";
       persistAllState();
       updateHeaderMeta();
-      showToast("API-Key gelöscht");
+      const st = document.getElementById("settings-key-status");
+      if (st) st.textContent = "Nicht gesetzt";
+      showToast("API-Key entfernt");
     }
 
     function saveSettingsGoals() {
       state.goals.calories = Math.max(800, parseInt(document.getElementById("set-goal-kcal").value, 10) || 2000);
       state.goals.protein = Math.max(20, parseInt(document.getElementById("set-goal-pro").value, 10) || 150);
-      state.goals.carbs = Math.max(0, parseInt(document.getElementById("set-goal-carb").value, 10) || 190);
-      state.goals.fat = Math.max(10, parseInt(document.getElementById("set-goal-fat").value, 10) || 65);
+      state.goals.carbs = Math.max(20, parseInt(document.getElementById("set-goal-carb").value, 10) || 190);
+      state.goals.fat = Math.max(15, parseInt(document.getElementById("set-goal-fat").value, 10) || 65);
       persistAllState();
       renderDiaryTab();
       closeSettingsModal();
@@ -3909,64 +4295,80 @@ Falls gewählte Zutaten geschmacklich nicht zusammenpassen (z. B. Cornflakes und
     }
 
     function exportAllDataJson() {
-      const bundle = {
+      const exportPayload = {
         app: "Smart Pantry",
         exportedAt: new Date().toISOString(),
-        data: state
+        data: {
+          sp_diary: state.diary,
+          sp_pantry: state.pantry,
+          sp_recipes: state.recipes,
+          sp_shopping: state.shopping,
+          sp_products: state.products,
+          sp_goals: state.goals
+        }
       };
-      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = url;
       a.download = `smart-pantry-backup-${toIsoDateKey()}.json`;
+      document.body.appendChild(a);
       a.click();
-      showToast("JSON-Sicherung heruntergeladen");
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("Datensicherung heruntergeladen");
     }
 
     function importAllDataJson(event) {
       const file = event.target?.files?.[0];
       if (!file) return;
+      event.target.value = "";
       const reader = new FileReader();
-      reader.onload = e => {
+      reader.onload = () => {
         try {
-          const parsed = JSON.parse(String(e.target?.result || "{}"));
-          const imported = parsed.data || parsed.state || parsed;
-          if (imported && typeof imported === "object") {
-            const def = createInitialState();
-            state = {
-              diary: imported.diary || imported.diaryByDate || def.diary,
-              pantry: Array.isArray(imported.pantry) ? imported.pantry.map(normalizePantryItem) : def.pantry,
-              recipes: Array.isArray(imported.recipes) ? imported.recipes : def.recipes,
-              shopping: Array.isArray(imported.shopping || imported.shoppingList) ? (imported.shopping || imported.shoppingList) : def.shopping,
-              products: Array.isArray(imported.products || imported.favoriteProducts) ? (imported.products || imported.favoriteProducts) : def.products,
-              goals: { ...DEFAULT_GOALS, ...(imported.goals || {}) },
-              settings: { ...def.settings, ...(imported.settings || {}) }
-            };
-            persistAllState();
-            updateHeaderMeta();
-            renderDiaryTab();
-            renderPantryTab();
-            renderRecipesTab();
-            renderShoppingTab();
-            closeSettingsModal();
-            showToast("JSON-Sicherung erfolgreich wiederhergestellt");
-          }
-        } catch (err) {
-          showToast("Ungültige JSON-Datei");
+          const parsed = JSON.parse(String(reader.result || "{}"));
+          const d = parsed.data || parsed;
+          if (!d || typeof d !== "object") throw new Error("INVALID");
+
+          if (d.sp_diary || d.diary) state.diary = d.sp_diary || d.diary;
+          if (Array.isArray(d.sp_pantry || d.pantry)) state.pantry = (d.sp_pantry || d.pantry).map(normalizePantryItem);
+          if (Array.isArray(d.sp_recipes || d.recipes)) state.recipes = d.sp_recipes || d.recipes;
+          if (Array.isArray(d.sp_shopping || d.shopping)) state.shopping = d.sp_shopping || d.shopping;
+          if (Array.isArray(d.sp_products || d.products)) state.products = d.sp_products || d.products;
+          if (d.sp_goals || d.goals) state.goals = { ...DEFAULT_GOALS, ...(d.sp_goals || d.goals) };
+
+          persistAllState();
+          renderDiaryTab();
+          renderPantryTab();
+          renderGeneratorPantryGrid();
+          renderRecipesTab();
+          renderShoppingTab();
+          closeSettingsModal();
+          showToast("Datensicherung erfolgreich wiederhergestellt!");
+        } catch (e) {
+          showToast("Fehler: Ungültige Backup-Datei");
         }
       };
       reader.readAsText(file);
     }
 
     // =========================================================================
-    // 13. INITIALISIERUNG
+    // 14. INITIALISIERUNG
     // =========================================================================
-    window.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", () => {
       initManifest();
+      getDiaryDay(currentTodayKey);
+      persistAllState();
       updateHeaderMeta();
-      getDiaryDay(selectedDiaryDateKey);
-      updateShoppingBadge();
       renderDiaryTab();
+      renderPantryTab();
+      renderGeneratorPantryGrid();
+      renderRecipesTab();
+      renderShoppingTab();
       setInterval(checkMidnightRollover, 30000);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) checkMidnightRollover();
+      });
       if (window.lucide) lucide.createIcons();
     });
   </script>
