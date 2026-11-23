@@ -2481,62 +2481,91 @@ function recipeMatch(ingredients) {
   });
   return { found, missing, percent: names.length ? Math.round(found.length / names.length * 100) : 0 };
 }
+const mealDe = {
+  cauliflower:'Karfiol', broccoli:'Brokkoli', potato:'Kartoffel', potatoes:'Kartoffeln', tomato:'Tomate', tomatoes:'Tomaten', onion:'Zwiebel', onions:'Zwiebeln', garlic:'Knoblauch', carrot:'Karotte', carrots:'Karotten', pepper:'Paprika', peppers:'Paprika', chicken:'Huhn', beef:'Rindfleisch', pork:'Schweinefleisch', rice:'Reis', pasta:'Nudeln', cheese:'Käse', egg:'Ei', eggs:'Eier', milk:'Milch', cream:'Sahne', butter:'Butter', spinach:'Spinat', mushroom:'Pilz', mushrooms:'Pilze', zucchini:'Zucchini', aubergine:'Melanzani', eggplant:'Melanzani', cucumber:'Gurke', lemon:'Zitrone', parsley:'Petersilie', basil:'Basilikum', flour:'Mehl', sugar:'Zucker', salt:'Salz', 'olive oil':'Olivenöl', oil:'Öl', bread:'Brot', beans:'Bohnen', lentils:'Linsen', chickpeas:'Kichererbsen', salmon:'Lachs', tuna:'Thunfisch', shrimp:'Garnelen', apple:'Apfel', banana:'Banane', oats:'Haferflocken', yogurt:'Joghurt'
+};
+function translateKnownFood(value) {
+  return String(value || '').replace(/\b(cauliflower|broccoli|potatoes|potato|tomatoes|tomato|onions|onion|garlic|carrots|carrot|peppers|pepper|chicken|beef|pork|rice|pasta|cheese|eggs|egg|milk|cream|butter|spinach|mushrooms|mushroom|zucchini|aubergine|eggplant|cucumber|lemon|parsley|basil|flour|sugar|salt|olive oil|oil|bread|beans|lentils|chickpeas|salmon|tuna|shrimp|apple|banana|oats|yogurt)\b/gi, m => mealDe[m.toLowerCase()] || m);
+}
+async function translateMealText(value) {
+  const input=String(value||'').trim(); if(!input) return input;
+  // MyMemory is used as a best-effort public translation service; original text remains as fallback.
+  try {
+    const chunks=[]; for(let i=0;i<input.length;i+=430) chunks.push(input.slice(i,i+430));
+    const translated=[];
+    for(const chunk of chunks){
+      const url='https://api.mymemory.translated.net/get?q='+encodeURIComponent(chunk)+'&langpair=en|de';
+      const res=await fetch(url); if(!res.ok) throw new Error('translation unavailable');
+      const data=await res.json(); const t=data?.responseData?.translatedText;
+      if(!t || data?.responseStatus && data.responseStatus!==200) throw new Error('translation unavailable');
+      translated.push(t);
+    }
+    return translated.join('');
+  } catch(e) { return translateKnownFood(input); }
+}
+function recipeMatch(ingredients) {
+  const pantryNames=state.pantry.map(p=>p.name.toLowerCase());
+  const found=[], missing=[];
+  (ingredients||[]).forEach(x=>{
+    const name=(typeof x==='string'?x:x.name||'').toLowerCase();
+    const de=translateKnownFood(name).toLowerCase();
+    const match=pantryNames.some(p=>p.includes(name)||name.includes(p)||p.includes(de)||de.includes(p));
+    (match?found:missing).push(typeof x==='string'?translateKnownFood(x):translateKnownFood(x.name));
+  });
+  const names=ingredients||[];
+  return {found,missing,percent:names.length?Math.round(found.length/names.length*100):0};
+}
 function renderDiscoveredRecipes(items) {
-  const el = document.getElementById('discovered-recipes-list');
-  if (!el) return;
-  if (!items.length) { el.innerHTML = '<p class="text-xs text-slate-500">Keine passenden Rezepte gefunden. Versuche eine andere Suche.</p>'; return; }
-  el.innerHTML = items.slice(0,3).map((r,idx) => {
-    const m = recipeMatch(r.ingredients || []);
-    const already = state.recipes.some(x => x.externalId && x.externalId === r.id);
-    const ingredients = (r.ingredients || []).map(x => typeof x === 'string' ? x : x.name);
+  const el=document.getElementById('discovered-recipes-list'); if(!el)return;
+  if(!items.length){el.innerHTML='<p class="text-xs text-slate-500">Keine passenden Rezepte gefunden. Versuche einen anderen Suchbegriff.</p>';return;}
+  el.innerHTML=items.slice(0,5).map((r,idx)=>{
+    const m=recipeMatch(r.ingredients||[]), already=state.recipes.some(x=>x.externalId&&x.externalId===r.id);
+    const ingredients=(r.ingredients||[]).map(x=>typeof x==='string'?x:x.name);
     return `<div class="rounded-xl border border-[#EFECE6] bg-white p-3 space-y-2">
-      <div class="flex gap-3">${r.image ? `<img src="${escapeAttr(r.image)}" alt="" class="w-20 h-20 rounded-lg object-cover">` : ''}<div class="min-w-0 flex-1"><div class="text-xs font-extrabold text-slate-800">${escapeHtml(r.name)}</div><div class="text-[10px] text-slate-500">${r.area ? escapeHtml(r.area)+' · ' : ''}${r.category ? escapeHtml(r.category) : ''}</div><span class="inline-block mt-1 rounded-full px-2 py-1 text-[10px] font-bold ${m.percent >= 75 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${m.percent}% · ${m.found.length}/${ingredients.length} Zutaten</span></div></div>
+      <div class="flex gap-3">${r.image?`<img src="${escapeAttr(r.image)}" alt="" class="w-20 h-20 rounded-lg object-cover">`:''}<div class="min-w-0 flex-1"><div class="text-xs font-extrabold text-slate-800">${escapeHtml(r.name)}</div><div class="text-[10px] text-slate-500">${r.area?escapeHtml(r.area)+' · ':''}${r.category?escapeHtml(r.category):''}</div><span class="inline-block mt-1 rounded-full px-2 py-1 text-[10px] font-bold ${m.percent>=75?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">${m.percent}% · ${m.found.length}/${ingredients.length} Zutaten vorhanden</span></div></div>
       <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:${m.percent}%"></div></div>
-      <div class="text-[11px] text-emerald-700">Vorhanden: ${m.found.length ? m.found.map(escapeHtml).join(', ') : 'Noch keine'}</div>
-      <div class="text-[11px] text-rose-600">Fehlt: ${m.missing.length ? m.missing.map(escapeHtml).join(', ') : 'Nichts'}</div>
-      <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-700">Zutaten & Zubereitung anzeigen</summary><p class="mt-2 text-slate-600">${ingredients.map(escapeHtml).join(', ')}</p><p class="mt-2 whitespace-pre-line text-slate-600">${escapeHtml(r.instructions || 'Keine Zubereitungsbeschreibung verfügbar.')}</p></details>
+      <div class="text-[11px] text-emerald-700">Schon da: ${m.found.length?m.found.map(escapeHtml).join(', '):'Noch keine'}</div>
+      <div class="text-[11px] text-rose-600">Noch nötig: ${m.missing.length?m.missing.map(escapeHtml).join(', '):'Nichts'}</div>
+      <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-700">Zutaten & Zubereitung anzeigen</summary><p class="mt-2 text-slate-600">${ingredients.map(x=>escapeHtml(translateKnownFood(x))).join(', ')}</p><p class="mt-2 whitespace-pre-line text-slate-600">${escapeHtml(r.instructions||'Keine Zubereitung verfügbar.')}</p></details>
       <div class="flex justify-end"><button ${already?'disabled':''} onclick="saveDiscoveredRecipe(${idx})" class="px-3 py-2 rounded-lg ${already?'bg-slate-100 text-slate-400':'bg-emerald-600 text-white'} text-[11px] font-bold">${already?'Bereits gespeichert':'In meine Rezeptdatenbank speichern'}</button></div>
     </div>`;
   }).join('');
-  window.discoveredRecipeResults = items.slice(0,3);
+  window.discoveredRecipeResults=items.slice(0,5);
 }
 function saveDiscoveredRecipe(index) {
-  const r = (window.discoveredRecipeResults || [])[index];
-  if (!r || state.recipes.some(x => x.externalId === r.id)) return;
-  const ingredients = (r.ingredients || []).map(x => ({name: typeof x === 'string' ? x : x.name, grams: Number((typeof x === 'string' ? 100 : x.grams) || 100), kcal:0, protein:0, carbs:0, fat:0}));
-  state.recipes.push({id:uid(), externalId:r.id, source:r.source || 'TheMealDB', sourceUrl:r.url || '', name:r.name, servings:2, instructions:r.instructions || '', ingredients});
-  saveState(); renderRecipes(); renderDiscoveredRecipes(window.discoveredRecipeResults || []); showToast('Rezept in deiner Datenbank gespeichert');
+  const r=(window.discoveredRecipeResults||[])[index]; if(!r||state.recipes.some(x=>x.externalId===r.id))return;
+  const ingredients=(r.ingredients||[]).map(x=>({name:translateKnownFood(typeof x==='string'?x:x.name),grams:Number((typeof x==='string'?100:x.grams)||100),kcal:0,protein:0,carbs:0,fat:0}));
+  state.recipes.push({id:uid(),externalId:r.id,source:r.source||'TheMealDB',sourceUrl:r.url||'',name:r.name,servings:2,instructions:r.instructions||'',ingredients});
+  saveState();renderRecipes();renderDiscoveredRecipes(window.discoveredRecipeResults||[]);showToast('Rezept in deiner Datenbank gespeichert');
 }
 async function mealDetails(meal) {
-  const ingredients=[];
-  for(let i=1;i<=20;i++){const name=(meal['strIngredient'+i]||'').trim(); if(name) ingredients.push({name, grams:100});}
-  return {id:meal.idMeal, name:meal.strMeal, ingredients, instructions:meal.strInstructions||'', image:meal.strMealThumb||'', area:meal.strArea||'', category:meal.strCategory||'', url:meal.strSource||'', source:'TheMealDB'};
+  const rawIngredients=[];for(let i=1;i<=20;i++){const name=(meal['strIngredient'+i]||'').trim();if(name)rawIngredients.push(name);}
+  const translated=await Promise.all([translateMealText(meal.strMeal||''),translateMealText(meal.strInstructions||''),...rawIngredients.map(translateMealText),translateMealText(meal.strCategory||'')]);
+  return {id:meal.idMeal,name:translated[0]||meal.strMeal,ingredients:translated.slice(2,-1).map(name=>({name,grams:100})),instructions:translated[1]||meal.strInstructions||'',image:meal.strMealThumb||'',area:meal.strArea||'',category:translated[translated.length-1]||'',url:meal.strSource||'',source:'TheMealDB'};
 }
 async function discoverPantryRecipes() {
-  const btn=document.getElementById('discover-recipes-btn'), out=document.getElementById('discovered-recipes-list');
+  const btn=document.getElementById('discover-recipes-btn'),out=document.getElementById('discovered-recipes-list');
   if(!state.pantry.length){out.innerHTML='<p class="text-xs text-slate-500">Dein Vorrat ist noch leer. Füge zuerst Produkte hinzu.</p>';return;}
   btn.disabled=true;btn.textContent='Suche…';out.innerHTML='<p class="text-xs text-slate-500">Suche passende Rezepte…</p>';
   try{
-    const terms=[...new Set(state.pantry.slice(0,8).map(p=>p.name.split(/[ ,]/)[0]).filter(Boolean))]; const found=new Map();
-    for(const term of terms.slice(0,5)){const res=await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(term));if(res.ok){const d=await res.json();(d.meals||[]).forEach(m=>found.set(m.idMeal,m));}}
-    const details=await Promise.all([...found.values()].slice(0,15).map(async m=>{const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(m.idMeal));if(!res.ok)return null;const d=await res.json();return d.meals&&d.meals[0]?mealDetails(d.meals[0]):null;}));
-    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);renderDiscoveredRecipes(results.slice(0,3));
-  }catch(e){console.error(e);out.innerHTML='<p class="text-xs text-rose-600">Rezeptdatenbank gerade nicht erreichbar.</p>';}finally{btn.disabled=false;btn.textContent='Zutaten abgleichen';}
+    const terms=[...new Set(state.pantry.slice(0,8).map(p=>p.name.split(/[ ,]/)[0]).filter(Boolean))];const found=new Map();
+    for(const term of terms.slice(0,5)){const english=Object.entries(mealDe).find(([,de])=>de.toLowerCase()===term.toLowerCase())?.[0]||term;const res=await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(english));if(res.ok){const d=await res.json();(d.meals||[]).forEach(m=>found.set(m.idMeal,m));}}
+    const details=await Promise.all([...found.values()].slice(0,12).map(async m=>{const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(m.idMeal));if(!res.ok)return null;const d=await res.json();return d.meals&&d.meals[0]?mealDetails(d.meals[0]):null;}));
+    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);renderDiscoveredRecipes(results.slice(0,5));
+  }catch(e){console.error(e);out.innerHTML='<p class="text-xs text-rose-600">Rezeptdatenbank oder Übersetzung gerade nicht erreichbar. Bitte später erneut versuchen.</p>';}finally{btn.disabled=false;btn.textContent='Zutaten abgleichen';}
 }
 async function searchExternalRecipes() {
-  const input=document.getElementById('discover-recipe-search');
-  const q=(input.value||'').trim() || state.pantry.slice(0,3).map(p=>p.name).join(' ');
+  const input=document.getElementById('discover-recipe-search');const q=(input.value||'').trim()||state.pantry.slice(0,3).map(p=>p.name).join(' ');
   if(!q){showToast('Bitte einen Suchbegriff eingeben');return;}
-  const out=document.getElementById('discovered-recipes-list');out.innerHTML='<p class="text-xs text-slate-500">Suche drei passende Rezepte…</p>';
+  const out=document.getElementById('discovered-recipes-list');out.innerHTML='<p class="text-xs text-slate-500">Suche bis zu fünf passende Rezepte und übersetze sie…</p>';
   try{
     const terms=q.split(/[ ,]+/).filter(Boolean);let meals=[];
-    // MealDB's search endpoint supports a single dish/name term. Ingredient searches use its ingredient filter.
+    const germanToEnglish=Object.entries(mealDe).find(([,de])=>de.toLowerCase()===q.toLowerCase())?.[0]||q;
     if(terms.length===1){const res=await fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(q));if(res.ok){const d=await res.json();meals=d.meals||[];}}
-    if(!meals.length){const res=await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(terms[0]));if(res.ok){const d=await res.json();meals=d.meals||[];}}
-    const details=await Promise.all(meals.slice(0,12).map(async m=>{const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(m.idMeal));if(!res.ok)return null;const d=await res.json();return d.meals&&d.meals[0]?mealDetails(d.meals[0]):null;}));
-    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);
-    renderDiscoveredRecipes(results.slice(0,3));
-  }catch(e){console.error(e);out.innerHTML='<p class="text-xs text-rose-600">Die Rezeptsuche ist gerade nicht erreichbar. Bitte später erneut versuchen.</p>';}
+    if(!meals.length){const res=await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(germanToEnglish));if(res.ok){const d=await res.json();meals=d.meals||[];}}
+    const details=await Promise.all(meals.slice(0,10).map(async m=>{const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(m.idMeal));if(!res.ok)return null;const d=await res.json();return d.meals&&d.meals[0]?mealDetails(d.meals[0]):null;}));
+    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);renderDiscoveredRecipes(results.slice(0,5));
+  }catch(e){console.error(e);out.innerHTML='<p class="text-xs text-rose-600">Die Rezeptsuche oder Übersetzung ist gerade nicht erreichbar. Bitte später erneut versuchen.</p>';}
 }
 
 function renderRecipes() {
@@ -3362,14 +3391,23 @@ async function callGeminiJson(promptText, imageBase64 = null) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-        })
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      let res;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+          })
+        });
+      } catch (fetchError) {
+        if (fetchError && fetchError.name === 'AbortError') throw new Error('Zeitüberschreitung: Gemini antwortet nicht innerhalb von 25 Sekunden. Bitte API-Schlüssel, Modell und Internetverbindung prüfen.');
+        throw fetchError;
+      } finally { clearTimeout(timeoutId); }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const apiMessage = data?.error?.message || `HTTP ${res.status}`;
