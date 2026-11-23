@@ -371,6 +371,16 @@
         </div>
 </div>
 
+      <div class="card-soft p-4 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div><h3 class="text-sm font-extrabold text-slate-800">Rezepte entdecken</h3><p class="text-[11px] text-slate-500">Passend zu deinem aktuellen Vorrat sortiert</p></div>
+          <button onclick="discoverPantryRecipes()" id="discover-recipes-btn" class="px-3 py-2 rounded-xl bg-violet-600 text-white text-xs font-bold">Zutaten abgleichen</button>
+        </div>
+        <div class="text-[11px] text-slate-500">Kostenlose Rezeptdatenbank und externe Rezeptideen</div>
+        <input id="discover-recipe-search" onkeydown="if(event.key==='Enter') searchExternalRecipes()" placeholder="Gericht oder Zutat suchen…" class="w-full px-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs" />
+        <div class="flex gap-2"><button onclick="searchExternalRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-xs font-bold">Online suchen</button><button onclick="discoverPantryRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold">Mein Vorrat</button></div>
+        <div id="discovered-recipes-list" class="space-y-2"><p class="text-xs text-slate-400">Starte den Zutaten-Abgleich, um passende Rezeptideen zu finden.</p></div>
+      </div>
       <div id="recipes-list-container" class="space-y-3"></div>
     </section>
 
@@ -2452,6 +2462,67 @@ function calcRecipeTotals(recipe) {
       weight: weight / srv
     }
   };
+}
+
+function normalizeIngredientName(value) {
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ß/g,'ss').replace(/[^a-z0-9äöü ]/gi,' ').replace(/\b(frisch|gehackt|getrocknet|optional|bio|klein|gross|groß)\b/g,'').replace(/\s+/g,' ').trim().replace(/n$/,'');
+}
+function pantryIngredientNames() {
+  return state.pantry.map(p => normalizeIngredientName(p.name)).filter(Boolean);
+}
+function recipeMatch(ingredients) {
+  const stock = pantryIngredientNames();
+  const names = (ingredients || []).map(x => typeof x === 'string' ? x : x.name).filter(Boolean);
+  const found = [], missing = [];
+  names.forEach(name => {
+    const n = normalizeIngredientName(name);
+    const match = stock.some(s => s === n || s.includes(n) || n.includes(s));
+    (match ? found : missing).push(name);
+  });
+  return { found, missing, percent: names.length ? Math.round(found.length / names.length * 100) : 0 };
+}
+function renderDiscoveredRecipes(items) {
+  const el = document.getElementById('discovered-recipes-list');
+  if (!el) return;
+  if (!items.length) { el.innerHTML = '<p class="text-xs text-slate-500">Keine passenden Rezepte gefunden. Versuche eine andere Suche.</p>'; return; }
+  el.innerHTML = items.map((r,idx) => {
+    const m = recipeMatch(r.ingredients || []);
+    const link = r.url ? `<a href="${escapeAttr(r.url)}" target="_blank" rel="noopener" class="text-violet-700 underline text-xs font-bold">Originalrezept öffnen ↗</a>` : '';
+    return `<div class="rounded-xl border border-[#EFECE6] bg-white p-3 space-y-2"><div class="flex items-start justify-between gap-2"><div class="text-xs font-extrabold text-slate-800">${escapeHtml(r.name)}</div><span class="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${m.percent >= 75 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${m.percent}% · ${m.found.length}/${(r.ingredients||[]).length}</span></div><div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:${m.percent}%"></div></div><div class="text-[11px] text-emerald-700">Vorhanden: ${m.found.length ? m.found.map(escapeHtml).join(', ') : 'Noch keine'}</div><div class="text-[11px] text-rose-600">Fehlt: ${m.missing.length ? m.missing.map(escapeHtml).join(', ') : 'Nichts'}</div>${link}</div>`;
+  }).join('');
+}
+async function discoverPantryRecipes() {
+  const btn = document.getElementById('discover-recipes-btn');
+  const out = document.getElementById('discovered-recipes-list');
+  if (!state.pantry.length) { out.innerHTML = '<p class="text-xs text-slate-500">Dein Vorrat ist noch leer. Füge zuerst Produkte hinzu.</p>'; return; }
+  btn.disabled = true; btn.textContent = 'Suche…'; out.innerHTML = '<p class="text-xs text-slate-500">Kostenlose Rezeptdatenbank wird durchsucht…</p>';
+  try {
+    const terms = [...new Set(state.pantry.slice(0,8).map(p => p.name.split(/[ ,]/)[0]).filter(Boolean))];
+    const found = new Map();
+    for (const term of terms.slice(0,5)) {
+      const response = await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i=' + encodeURIComponent(term));
+      if (!response.ok) continue;
+      const data = await response.json();
+      (data.meals || []).slice(0,12).forEach(m => found.set(m.idMeal, m));
+    }
+    const details = await Promise.all([...found.values()].slice(0,18).map(async m => {
+      const response = await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i=' + encodeURIComponent(m.idMeal));
+      const data = await response.json(); const meal = data.meals && data.meals[0];
+      if (!meal) return null;
+      const ingredients = [];
+      for (let i=1;i<=20;i++) { const name=(meal['strIngredient'+i]||'').trim(); if(name) ingredients.push(name); }
+      return {name:meal.strMeal, ingredients, url:meal.strSource || meal.strYoutube || `https://www.themealdb.com/meal/${meal.idMeal}`};
+    }));
+    const results = details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);
+    renderDiscoveredRecipes(results);
+  } catch (e) { console.error(e); out.innerHTML = '<p class="text-xs text-rose-600">Die Rezeptdatenbank ist gerade nicht erreichbar. Bitte später erneut versuchen.</p>'; }
+  finally { btn.disabled = false; btn.textContent = 'Zutaten abgleichen'; }
+}
+function searchExternalRecipes() {
+  const q = (document.getElementById('discover-recipe-search').value || '').trim() || state.pantry.slice(0,5).map(p=>p.name).join(' ');
+  if (!q) { showToast('Bitte einen Suchbegriff oder Vorratsartikel eingeben'); return; }
+  const url = 'https://www.google.com/search?q=' + encodeURIComponent('site:chefkoch.de OR site:lecker.de OR site:essen-und-trinken.de Rezept ' + q);
+  window.open(url, '_blank', 'noopener');
 }
 
 function renderRecipes() {
