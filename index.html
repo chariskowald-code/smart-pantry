@@ -436,6 +436,19 @@
           </button>
         </div>
 
+        <button type="button" onclick="toggleCustomFoodForm()" class="w-full text-left px-3 py-2.5 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 text-xs font-bold text-emerald-800">＋ Eigenes Lebensmittel anlegen</button>
+        <div id="custom-food-form" class="hidden card-soft p-3 space-y-2">
+          <p class="text-xs font-extrabold text-slate-700">Eigenes Lebensmittel (Nährwerte pro 100 g)</p>
+          <input id="custom-food-name" type="text" placeholder="Name des Lebensmittels" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs" />
+          <div class="grid grid-cols-2 gap-2">
+            <input id="custom-food-kcal" type="number" min="0" step="any" placeholder="kcal / 100 g" class="px-3 py-2 rounded-lg border border-slate-200 text-xs" />
+            <input id="custom-food-protein" type="number" min="0" step="any" placeholder="Protein g" class="px-3 py-2 rounded-lg border border-slate-200 text-xs" />
+            <input id="custom-food-carbs" type="number" min="0" step="any" placeholder="Kohlenhydrate g" class="px-3 py-2 rounded-lg border border-slate-200 text-xs" />
+            <input id="custom-food-fat" type="number" min="0" step="any" placeholder="Fett g" class="px-3 py-2 rounded-lg border border-slate-200 text-xs" />
+            <input id="custom-food-portion" type="number" min="1" step="1" placeholder="Portionsgröße in g (optional)" class="col-span-2 px-3 py-2 rounded-lg border border-slate-200 text-xs" />
+          </div>
+          <div class="flex justify-end gap-2"><button onclick="toggleCustomFoodForm()" class="px-3 py-2 rounded-lg text-xs font-bold text-slate-500">Abbrechen</button><button onclick="saveCustomDiaryFood()" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold">Speichern & auswählen</button></div>
+        </div>
 
         <!-- Selected Item Amount & Unit Adjuster -->
         <div id="selected-diary-food-box" class="hidden card-soft p-3.5 bg-emerald-50/50 border-emerald-200 space-y-3">
@@ -1272,6 +1285,7 @@ function renderDiary() {
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                   <span class="text-xs font-extrabold text-slate-700">${Math.round(it.kcal)} kcal</span>
+                  <button onclick="editDiaryEntry('${m.key}', ${idx})" class="text-emerald-700 text-[11px] font-bold px-1">Ändern</button>
                   <button onclick="removeDiaryEntry('${m.key}', ${idx})" class="text-slate-300 hover:text-rose-500 text-xs p-1">✕</button>
                 </div>
               </div>
@@ -1283,6 +1297,48 @@ function renderDiary() {
   });
 
   container.innerHTML = html;
+}
+
+function editDiaryEntry(mealKey, idx) {
+  const entry = state.diary[state.selectedDate]?.meals?.[mealKey]?.[idx];
+  if (!entry) return;
+  const entered = prompt(`Neue Menge für „${entry.name}“ (${entry.unit}) eingeben:`, String(entry.amount));
+  if (entered === null) return;
+  const nextAmount = Number(entered);
+  if (!Number.isFinite(nextAmount) || nextAmount <= 0) { showToast('Bitte eine gültige Menge eingeben'); return; }
+  const oldAmount = Number(entry.amount) || 1;
+  const factor = nextAmount / oldAmount;
+  entry.amount = nextAmount;
+  ['kcal', 'protein', 'carbs', 'fat'].forEach(k => entry[k] = Math.round((Number(entry[k]) || 0) * factor * 10) / 10);
+  saveState();
+  renderDiary();
+  showToast('Menge aktualisiert');
+}
+
+function toggleCustomFoodForm() {
+  document.getElementById('custom-food-form').classList.toggle('hidden');
+}
+
+function saveCustomDiaryFood() {
+  const name = document.getElementById('custom-food-name').value.trim();
+  const kcal = Number(document.getElementById('custom-food-kcal').value);
+  const protein = Number(document.getElementById('custom-food-protein').value);
+  const carbs = Number(document.getElementById('custom-food-carbs').value);
+  const fat = Number(document.getElementById('custom-food-fat').value);
+  const portionG = Number(document.getElementById('custom-food-portion').value) || 100;
+  if (!name || ![kcal, protein, carbs, fat].every(v => Number.isFinite(v) && v >= 0)) {
+    showToast('Bitte Name und alle Nährwerte korrekt eintragen'); return;
+  }
+  const product = { id: uid(), name, kcal, protein, carbs, fat, portionG, defaultUnit: 'g', source: 'Eigenes Produkt' };
+  state.customProducts = Array.isArray(state.customProducts) ? state.customProducts : [];
+  state.customProducts = state.customProducts.filter(p => p.name.toLowerCase() !== name.toLowerCase());
+  state.customProducts.push(product);
+  saveState();
+  const candidate = { ...product, type: 'Eigenes Produkt', badgeClass: 'bg-violet-100 text-violet-700' };
+  currentCandidateList = [candidate];
+  selectDiaryCandidate(0);
+  document.getElementById('custom-food-form').classList.add('hidden');
+  showToast('Eigenes Lebensmittel gespeichert');
 }
 
 function removeDiaryEntry(mealKey, idx) {
@@ -1335,6 +1391,7 @@ function renderInitialDiarySuggestions() {
       recipeId: r.id
     });
   });
+  (state.customProducts || []).forEach(p => results.push({ ...p, type: 'Eigenes Produkt', badgeClass: 'bg-violet-100 text-violet-700', defaultUnit: 'g' }));
   state.pantry.slice(0, 8).forEach(p => {
     results.push({
       type: 'Vorrat',
@@ -1382,7 +1439,12 @@ function onDiarySearchInput(val) {
     }
   });
 
-  // 2. Pantry Items
+  // 2. Eigene Lebensmittel
+  (state.customProducts || []).forEach(p => {
+    if (p.name.toLowerCase().includes(qLow)) localMatches.push({ ...p, type: 'Eigenes Produkt', badgeClass: 'bg-violet-100 text-violet-700', defaultUnit: 'g' });
+  });
+
+  // 3. Pantry Items
   state.pantry.forEach(p => {
     if (p.name.toLowerCase().includes(qLow)) {
       localMatches.push({
