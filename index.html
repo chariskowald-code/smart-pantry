@@ -1474,7 +1474,7 @@ function renderDiaryCandidateList(list) {
           <span class="text-xs font-extrabold text-slate-800 truncate">${escapeHtml(item.name)}</span>
         </div>
         <div class="text-[11px] text-slate-500 mt-0.5 truncate">
-          ${item.defaultUnit === 'Portion' ? 'Pro Portion' : 'Pro 100g'}: P ${item.protein}g · KH ${item.carbs}g · F ${item.fat}g
+          ${item.defaultUnit === 'Portion' ? `Pro Portion (${Math.round(item.portionG || 250)} g)` : 'Pro 100g'}: P ${item.protein}g · KH ${item.carbs}g · F ${item.fat}g
         </div>
       </div>
       <span class="text-xs font-extrabold text-emerald-700 shrink-0">${Math.round(item.kcal)} kcal</span>
@@ -1490,7 +1490,7 @@ function selectDiaryCandidate(idx) {
   box.classList.remove('hidden');
   document.getElementById('sel-food-badge').textContent = c.type;
   document.getElementById('sel-food-name').textContent = c.name;
-  document.getElementById('sel-food-per100').textContent = `${Math.round(c.kcal)} kcal · P ${c.protein}g · KH ${c.carbs}g · F ${c.fat}g (${c.defaultUnit === 'Portion' ? 'pro Portion' : 'pro 100g'})`;
+  document.getElementById('sel-food-per100').textContent = `${Math.round(c.kcal)} kcal · P ${c.protein}g · KH ${c.carbs}g · F ${c.fat}g (${c.defaultUnit === 'Portion' ? `pro Portion à ${Math.round(c.portionG || 250)} g` : 'pro 100g'})`;
   setDiaryUnit(c.defaultUnit || 'g');
 }
 
@@ -1504,6 +1504,7 @@ function setDiaryUnit(unit) {
   const amtInput = document.getElementById('sel-food-amount');
   const btnG = document.getElementById('unit-btn-g');
   const btnP = document.getElementById('unit-btn-portion');
+  btnP.textContent = selectedFoodCandidate ? `Portion (${Math.round(selectedFoodCandidate.portionG || 100)} g)` : 'Portion';
   if (unit === 'g') {
     amtInput.value = '100';
     btnG.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white';
