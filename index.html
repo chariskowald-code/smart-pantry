@@ -378,7 +378,7 @@
         </div>
         <div class="text-[11px] text-slate-500">Kostenlose Rezeptdatenbank und externe Rezeptideen</div>
         <input id="discover-recipe-search" onkeydown="if(event.key==='Enter') searchExternalRecipes()" placeholder="Gericht oder Zutat suchen…" class="w-full px-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs" />
-        <div class="flex gap-2"><button onclick="searchExternalRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-xs font-bold">3 Rezepte suchen</button><button onclick="discoverPantryRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold">Mein Vorrat</button></div>
+        <div class="flex gap-2"><button onclick="searchExternalRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-xs font-bold">5 Rezepte suchen</button><button onclick="discoverPantryRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold">Mein Vorrat</button></div>
         <div id="discovered-recipes-list" class="space-y-2"><p class="text-xs text-slate-400">Starte den Zutaten-Abgleich, um passende Rezeptideen zu finden.</p></div>
       </div>
       <div id="recipes-list-container" class="space-y-3"></div>
@@ -2515,13 +2515,24 @@ function recipeMatch(ingredients) {
   const names=ingredients||[];
   return {found,missing,percent:names.length?Math.round(found.length/names.length*100):0};
 }
+function selectSixRecipes(results) {
+  // Erste Gruppe: höchstens drei echte Rezepte mit mindestens 50 % Vorratsübereinstimmung.
+  const ranked=[...results].sort((a,b)=>recipeMatch(b.ingredients||[]).percent-recipeMatch(a.ingredients||[]).percent);
+  const pantryHits=ranked.filter(r=>recipeMatch(r.ingredients||[]).percent>=50).slice(0,3);
+  const used=new Set(pantryHits.map(r=>String(r.id)));
+  // Zweite Gruppe: drei weitere unterschiedliche Rezepte, auch wenn dafür eingekauft werden muss.
+  const more=ranked.filter(r=>!used.has(String(r.id))).slice(0,3);
+  return [...pantryHits.map(r=>({...r,_group:'pantry'})),...more.map(r=>({...r,_group:'more'}))];
+}
 function renderDiscoveredRecipes(items) {
   const el=document.getElementById('discovered-recipes-list'); if(!el)return;
   if(!items.length){el.innerHTML='<p class="text-xs text-slate-500">Keine passenden Rezepte gefunden. Versuche einen anderen Suchbegriff.</p>';return;}
-  el.innerHTML=items.slice(0,5).map((r,idx)=>{
+  const shown=items.slice(0,6);
+  el.innerHTML=shown.map((r,idx)=>{
     const m=recipeMatch(r.ingredients||[]), already=state.recipes.some(x=>x.externalId&&x.externalId===r.id);
+    const section=(idx===0&&r._group==='pantry')?'<div class="text-sm font-extrabold text-emerald-700 pt-2">🥬 Rezepte mit mindestens 50 % aus deinem Vorrat</div>':(r._group==='more'&&(idx===0||items[idx-1]?._group!=='more'))?'<div class="text-sm font-extrabold text-slate-700 pt-4">🍽️ Weitere passende Rezepte</div>':'';
     const ingredients=(r.ingredients||[]).map(x=>typeof x==='string'?x:x.name);
-    return `<div class="rounded-xl border border-[#EFECE6] bg-white p-3 space-y-2">
+    return `${section}<div class="rounded-xl border border-[#EFECE6] bg-white p-3 space-y-2">
       <div class="flex gap-3">${r.image?`<img src="${escapeAttr(r.image)}" alt="" class="w-20 h-20 rounded-lg object-cover">`:''}<div class="min-w-0 flex-1"><div class="text-xs font-extrabold text-slate-800">${escapeHtml(r.name)}</div><div class="text-[10px] text-slate-500">${r.area?escapeHtml(r.area)+' · ':''}${r.category?escapeHtml(r.category):''}</div><span class="inline-block mt-1 rounded-full px-2 py-1 text-[10px] font-bold ${m.percent>=75?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">${m.percent}% · ${m.found.length}/${ingredients.length} Zutaten vorhanden</span></div></div>
       <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:${m.percent}%"></div></div>
       <div class="text-[11px] text-emerald-700">Schon da: ${m.found.length?m.found.map(escapeHtml).join(', '):'Noch keine'}</div>
@@ -2530,7 +2541,7 @@ function renderDiscoveredRecipes(items) {
       <div class="flex justify-end"><button ${already?'disabled':''} onclick="saveDiscoveredRecipe(${idx})" class="px-3 py-2 rounded-lg ${already?'bg-slate-100 text-slate-400':'bg-emerald-600 text-white'} text-[11px] font-bold">${already?'Bereits gespeichert':'In meine Rezeptdatenbank speichern'}</button></div>
     </div>`;
   }).join('');
-  window.discoveredRecipeResults=items.slice(0,5);
+  window.discoveredRecipeResults=shown;
 }
 function saveDiscoveredRecipe(index) {
   const r=(window.discoveredRecipeResults||[])[index]; if(!r||state.recipes.some(x=>x.externalId===r.id))return;
@@ -2551,21 +2562,43 @@ async function discoverPantryRecipes() {
     const terms=[...new Set(state.pantry.slice(0,8).map(p=>p.name.split(/[ ,]/)[0]).filter(Boolean))];const found=new Map();
     for(const term of terms.slice(0,5)){const english=Object.entries(mealDe).find(([,de])=>de.toLowerCase()===term.toLowerCase())?.[0]||term;const res=await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(english));if(res.ok){const d=await res.json();(d.meals||[]).forEach(m=>found.set(m.idMeal,m));}}
     const details=await Promise.all([...found.values()].slice(0,12).map(async m=>{const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(m.idMeal));if(!res.ok)return null;const d=await res.json();return d.meals&&d.meals[0]?mealDetails(d.meals[0]):null;}));
-    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);renderDiscoveredRecipes(results.slice(0,5));
+    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);renderDiscoveredRecipes(selectSixRecipes(results));
   }catch(e){console.error(e);out.innerHTML='<p class="text-xs text-rose-600">Rezeptdatenbank oder Übersetzung gerade nicht erreichbar. Bitte später erneut versuchen.</p>';}finally{btn.disabled=false;btn.textContent='Zutaten abgleichen';}
 }
 async function searchExternalRecipes() {
-  const input=document.getElementById('discover-recipe-search');const q=(input.value||'').trim()||state.pantry.slice(0,3).map(p=>p.name).join(' ');
+  const input=document.getElementById('discover-recipe-search');
+  const q=(input.value||'').trim()||state.pantry.slice(0,3).map(p=>p.name).join(' ');
   if(!q){showToast('Bitte einen Suchbegriff eingeben');return;}
-  const out=document.getElementById('discovered-recipes-list');out.innerHTML='<p class="text-xs text-slate-500">Suche bis zu fünf passende Rezepte und übersetze sie…</p>';
+  const out=document.getElementById('discovered-recipes-list');
+  out.innerHTML='<p class="text-xs text-slate-500">Suche bis zu sechs passende Rezepte…</p>';
   try{
-    const terms=q.split(/[ ,]+/).filter(Boolean);let meals=[];
-    const germanToEnglish=Object.entries(mealDe).find(([,de])=>de.toLowerCase()===q.toLowerCase())?.[0]||q;
-    if(terms.length===1){const res=await fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(q));if(res.ok){const d=await res.json();meals=d.meals||[];}}
-    if(!meals.length){const res=await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(germanToEnglish));if(res.ok){const d=await res.json();meals=d.meals||[];}}
-    const details=await Promise.all(meals.slice(0,10).map(async m=>{const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(m.idMeal));if(!res.ok)return null;const d=await res.json();return d.meals&&d.meals[0]?mealDetails(d.meals[0]):null;}));
-    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);renderDiscoveredRecipes(results.slice(0,5));
-  }catch(e){console.error(e);out.innerHTML='<p class="text-xs text-rose-600">Die Rezeptsuche oder Übersetzung ist gerade nicht erreichbar. Bitte später erneut versuchen.</p>';}
+    const terms=[...new Set(q.split(/[ ,]+/).filter(Boolean))];
+    const found=new Map();
+    const translatedTerms=terms.map(term=>Object.entries(mealDe).find(([,de])=>de.toLowerCase()===term.toLowerCase())?.[0]||term);
+    // Zuerst nach Rezeptnamen suchen, danach zusätzlich nach einzelnen Zutaten.
+    const requests=[];
+    if(terms.length===1) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(q)));
+    for(const term of translatedTerms.slice(0,3)) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(term)));
+    const responses=await Promise.allSettled(requests);
+    for(const response of responses){
+      if(response.status!=='fulfilled'||!response.value.ok) continue;
+      const data=await response.value.json();
+      (data.meals||[]).forEach(meal=>found.set(meal.idMeal,meal));
+    }
+    const candidates=[...found.values()].slice(0,20);
+    const details=await Promise.all(candidates.map(async meal=>{
+      const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(meal.idMeal));
+      if(!res.ok)return null;
+      const data=await res.json();
+      return data.meals&&data.meals[0]?mealDetails(data.meals[0]):null;
+    }));
+    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);
+    renderDiscoveredRecipes(selectSixRecipes(results));
+    if(results.length) out.insertAdjacentHTML('afterbegin','<p class="text-xs text-slate-500">'+Math.min(5,results.length)+' von '+results.length+' gefundenen Rezepten – nach Vorrats-Treffern sortiert</p>');
+  }catch(e){
+    console.error(e);
+    out.innerHTML='<p class="text-xs text-rose-600">Die Rezeptsuche ist gerade nicht erreichbar. Bitte später erneut versuchen.</p>';
+  }
 }
 
 function renderRecipes() {
