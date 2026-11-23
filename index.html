@@ -296,6 +296,19 @@
       <!-- Collapsible Storage Groups Container -->
       <div id="pantry-groups-container" class="space-y-3"></div>
 
+      <!-- Permanent product database, independent from current pantry stock -->
+      <div class="card-soft p-4 space-y-3 mt-5">
+        <div class="flex items-center justify-between gap-2">
+          <div><h3 class="text-sm font-extrabold text-slate-800">Produktdatenbank</h3><p id="product-db-count" class="text-[11px] text-slate-500">Dauerhaft gespeicherte Produkte</p></div>
+          <button onclick="createDatabaseProduct()" class="px-3 py-2 rounded-xl bg-violet-600 text-white text-xs font-bold">+ Eigenes Produkt</button>
+        </div>
+        <div class="flex gap-2">
+          <input id="product-db-search" oninput="renderProductDatabase()" placeholder="Produktdatenbank durchsuchen…" class="min-w-0 flex-1 px-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs" />
+          <button onclick="toggleBarcodeScanner('database')" class="px-3 py-2 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 text-xs font-bold">▥ Barcode</button>
+        </div>
+        <div id="product-db-list" class="space-y-2"></div>
+      </div>
+
       <!-- Floating Selection Bar when Pantry Items Checked -->
       <div id="pantry-selection-bar" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 z-30 w-full max-w-xl px-4">
         <div class="bg-slate-900 text-white rounded-2xl p-3 shadow-xl flex items-center justify-between gap-2">
@@ -822,6 +835,7 @@ function defaultState() {
     recipes: [],
     shopping: [],
     customProducts: [],
+    productDatabase: [],
     collapsedStorage: {}, // { 'Kühlschrank': true/false }
     expandedPantryItems: {}, // { id: true }
     geminiApiKey: ''
@@ -846,6 +860,7 @@ function loadAllState() {
         recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
         shopping: Array.isArray(parsed.shopping) ? parsed.shopping.map(migrateShoppingItem) : [],
         customProducts: Array.isArray(parsed.customProducts) ? parsed.customProducts : [],
+        productDatabase: Array.isArray(parsed.productDatabase) ? parsed.productDatabase : [],
         collapsedStorage: parsed.collapsedStorage || {},
         expandedPantryItems: parsed.expandedPantryItems || {},
         geminiApiKey: parsed.geminiApiKey || state.geminiApiKey || ''
@@ -857,6 +872,9 @@ function loadAllState() {
     state = def;
   }
   if (!state.selectedDate) state.selectedDate = todayStr();
+  state.productDatabase = Array.isArray(state.productDatabase) ? state.productDatabase : [];
+  // Migrate products already known from custom foods and current pantry into the permanent database.
+  [...(state.customProducts || []), ...(state.pantry || [])].forEach(p => upsertProductDatabase(p));
   ensureDayEntry(state.selectedDate);
   updateAiDot();
 }
@@ -1285,6 +1303,8 @@ function renderDiary() {
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                   <span class="text-xs font-extrabold text-slate-700">${Math.round(it.kcal)} kcal</span>
+                  <button onclick="transferDiaryEntry('${m.key}', ${idx}, false)" class="text-violet-700 text-[10px] font-bold px-1">Kopieren</button>
+                  <button onclick="transferDiaryEntry('${m.key}', ${idx}, true)" class="text-amber-700 text-[10px] font-bold px-1">Verschieben</button>
                   <button onclick="editDiaryEntry('${m.key}', ${idx})" class="text-emerald-700 text-[11px] font-bold px-1">Ändern</button>
                   <button onclick="removeDiaryEntry('${m.key}', ${idx})" class="text-slate-300 hover:text-rose-500 text-xs p-1">✕</button>
                 </div>
@@ -1297,6 +1317,16 @@ function renderDiary() {
   });
 
   container.innerHTML = html;
+}
+
+function transferDiaryEntry(mealKey, idx, move) {
+  const entry = state.diary[state.selectedDate]?.meals?.[mealKey]?.[idx]; if (!entry) return;
+  const date = prompt('Zieldatum (JJJJ-MM-TT):', state.selectedDate); if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  const meal = prompt('Ziel-Mahlzeit: breakfast, lunch, dinner oder snacks', mealKey); if (!['breakfast','lunch','dinner','snacks'].includes(meal)) { showToast('Ungültige Mahlzeit'); return; }
+  ensureDayEntry(date);
+  state.diary[date].meals[meal].push({ ...entry, id: uid() });
+  if (move) state.diary[state.selectedDate].meals[mealKey].splice(idx, 1);
+  saveState(); renderDiary(); showToast(move ? 'Eintrag verschoben' : 'Eintrag kopiert');
 }
 
 function editDiaryEntry(mealKey, idx) {
@@ -1391,6 +1421,7 @@ function renderInitialDiarySuggestions() {
       recipeId: r.id
     });
   });
+  (state.productDatabase || []).forEach(p => results.push({ ...p, type: 'Produktdatenbank', badgeClass: 'bg-violet-100 text-violet-700', defaultUnit: 'g' }));
   (state.customProducts || []).forEach(p => results.push({ ...p, type: 'Eigenes Produkt', badgeClass: 'bg-violet-100 text-violet-700', defaultUnit: 'g' }));
   state.pantry.slice(0, 8).forEach(p => {
     results.push({
@@ -1439,7 +1470,10 @@ function onDiarySearchInput(val) {
     }
   });
 
-  // 2. Eigene Lebensmittel
+  // 2. Dauerhafte Produktdatenbank
+  (state.productDatabase || []).forEach(p => { if (p.name.toLowerCase().includes(qLow)) localMatches.push({ ...p, type: 'Produktdatenbank', badgeClass: 'bg-violet-100 text-violet-700', defaultUnit: 'g' }); });
+
+  // 3. Eigene Lebensmittel
   (state.customProducts || []).forEach(p => {
     if (p.name.toLowerCase().includes(qLow)) localMatches.push({ ...p, type: 'Eigenes Produkt', badgeClass: 'bg-violet-100 text-violet-700', defaultUnit: 'g' });
   });
@@ -1664,25 +1698,41 @@ function toggleBarcodeScanner(target = 'diary') {
           const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(scannedCode)}.json`);
           const d = await r.json();
           if (d.status !== 1 || !d.product) {
-            showToast('Produkt nicht in Open Food Facts gefunden', 'error');
+            if (targetAtScan === 'database') {
+              const name = prompt(`Barcode ${scannedCode} wurde nicht gefunden. Produktname eingeben:`);
+              if (name && name.trim()) {
+                const kcal = Number(prompt('Kalorien pro 100 g:', '0')) || 0;
+                const protein = Number(prompt('Protein pro 100 g:', '0')) || 0;
+                const carbs = Number(prompt('Kohlenhydrate pro 100 g:', '0')) || 0;
+                const fat = Number(prompt('Fett pro 100 g:', '0')) || 0;
+                upsertProductDatabase({ name: name.trim(), barcode: scannedCode, kcal, protein, carbs, fat, source: 'Eigener Barcode-Eintrag' });
+                saveState(); renderProductDatabase(); showToast('Eigenes Produkt mit Barcode gespeichert');
+              }
+            } else showToast('Produkt nicht in Open Food Facts gefunden. Du kannst es unter Produktdatenbank selbst anlegen.', 'error');
             return;
           }
           const p = d.product;
           const nu = p.nutriments || {};
           const item = {
+            barcode: scannedCode, portionG: 100, source: 'Barcode / Open Food Facts',
             name: p.product_name || p.product_name_de || scannedCode,
             kcal: Number(nu['energy-kcal_100g'] || 0),
             protein: Number(nu.proteins_100g || 0),
             carbs: Number(nu.carbohydrates_100g || 0),
             fat: Number(nu.fat_100g || 0)
           };
-          if (targetAtScan === 'diary') {
+          upsertProductDatabase(item);
+          saveState();
+          if (targetAtScan === 'database') {
+            renderProductDatabase();
+            showToast('Produkt dauerhaft in der Produktdatenbank gespeichert');
+          } else if (targetAtScan === 'diary') {
             renderDiaryCandidateList([{
               type: 'Barcode / Open Food Facts', badgeClass: 'bg-emerald-100 text-emerald-800',
               ...item, defaultUnit: 'g', portionG: 100
             }]);
             selectDiaryCandidate(0);
-          } else {
+          } else if (targetAtScan === 'pantry') {
             openAddPantryModal();
             document.getElementById('pm-name').value = item.name;
             document.getElementById('pm-lookup-input').value = item.name;
@@ -1806,6 +1856,7 @@ function renderPantry() {
         <p class="text-xs text-slate-500">Nutze <b>Barcode-Scan</b>, <b>Sprache / Text</b> für Mehrfachnennungen oder <b>+ Artikel</b>.</p>
       </div>
     `;
+    renderProductDatabase();
     return;
   }
 
@@ -1888,6 +1939,46 @@ function renderPantry() {
   });
 
   container.innerHTML = html || `<div class="card-soft p-5 text-center text-xs text-slate-400">Keine Artikel für diesen Filter gefunden.</div>`;
+  renderProductDatabase();
+}
+
+function upsertProductDatabase(product) {
+  if (!state || !product || !product.name) return;
+  state.productDatabase = Array.isArray(state.productDatabase) ? state.productDatabase : [];
+  const key = String(product.barcode || '').trim();
+  const idx = key ? state.productDatabase.findIndex(x => String(x.barcode || '') === key) : state.productDatabase.findIndex(x => x.name.toLowerCase() === String(product.name).toLowerCase());
+  const clean = { id: product.id || uid(), name: product.name, barcode: product.barcode || '', kcal: Number(product.kcal)||0, protein: Number(product.protein)||0, carbs: Number(product.carbs)||0, fat: Number(product.fat)||0, portionG: Number(product.portionG)||100, source: product.source || 'Gespeichert' };
+  if (idx >= 0) state.productDatabase[idx] = { ...state.productDatabase[idx], ...clean, id: state.productDatabase[idx].id };
+  else state.productDatabase.unshift(clean);
+}
+
+function renderProductDatabase() {
+  const list = document.getElementById('product-db-list');
+  if (!list) return;
+  const q = (document.getElementById('product-db-search')?.value || '').trim().toLowerCase();
+  const products = (state.productDatabase || []).filter(p => !q || p.name.toLowerCase().includes(q) || String(p.barcode||'').includes(q));
+  document.getElementById('product-db-count').textContent = `${state.productDatabase.length} dauerhaft gespeicherte Produkte · ${products.length} angezeigt`;
+  list.innerHTML = products.length ? products.map(p => `<div class="rounded-xl border border-[#EFECE6] p-3 flex items-center justify-between gap-2"><div class="min-w-0"><div class="text-xs font-bold text-slate-800 truncate">${escapeHtml(p.name)}</div><div class="text-[10px] text-slate-500">${Math.round(p.kcal)} kcal · P ${p.protein}g · KH ${p.carbs}g · F ${p.fat}g pro 100 g${p.barcode ? ' · '+escapeHtml(p.barcode) : ''}</div></div><button onclick="addDatabaseProductToPantry('${p.id}')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold">In Vorrat</button></div>`).join('') : '<p class="text-xs text-slate-400 py-2">Noch keine Produkte gespeichert. Du kannst auch Produkte scannen, die du noch nicht besitzt.</p>';
+}
+
+function createDatabaseProduct() {
+  const name = prompt('Produktname:'); if (!name || !name.trim()) return;
+  const kcal = Number(prompt('Kalorien pro 100 g:', '0')); if (!Number.isFinite(kcal) || kcal < 0) return;
+  const protein = Number(prompt('Protein pro 100 g:', '0')) || 0;
+  const carbs = Number(prompt('Kohlenhydrate pro 100 g:', '0')) || 0;
+  const fat = Number(prompt('Fett pro 100 g:', '0')) || 0;
+  const barcode = prompt('Barcode (optional):', '') || '';
+  upsertProductDatabase({ name: name.trim(), kcal, protein, carbs, fat, barcode, source: 'Eigenes Produkt' });
+  saveState(); renderProductDatabase(); showToast('Produkt in Datenbank gespeichert');
+}
+
+function addDatabaseProductToPantry(id) {
+  const p = (state.productDatabase || []).find(x => x.id === id); if (!p) return;
+  openAddPantryModal();
+  document.getElementById('pm-name').value = p.name;
+  document.getElementById('pm-kcal').value = p.kcal; document.getElementById('pm-protein').value = p.protein;
+  document.getElementById('pm-carbs').value = p.carbs; document.getElementById('pm-fat').value = p.fat;
+  document.getElementById('pm-portion-g').value = p.portionG || 100;
 }
 
 function deletePantryItem(id) {
@@ -2055,10 +2146,11 @@ function savePantryItemModal() {
       source: 'Vorrat'
     });
   }
+  upsertProductDatabase({ name, kcal, protein, carbs, fat, portionG, source: 'Vorrat' });
   saveState();
   closePantryItemModal();
   renderPantry();
-  showToast('Vorrat gespeichert');
+  showToast('Vorrat und Produktdatenbank gespeichert');
 }
 
 // ============================================================================
@@ -2602,7 +2694,8 @@ Antworte ausschließlich als JSON-Objekt:
       showToast('KI-Rezept im Editor geöffnet');
     }
   } catch (e) {
-    showToast('KI-Rezept konnte nicht erstellt werden', 'error');
+    console.error('KI-Rezept Fehler:', e);
+    showToast(e?.message || 'KI-Rezept konnte nicht erstellt werden', 'error');
   } finally {
     btn.textContent = 'Rezept generieren';
     btn.disabled = false;
@@ -3113,7 +3206,7 @@ async function callGeminiJson(promptText, imageBase64 = null) {
   const apiKey = (state.geminiApiKey || '').trim();
   if (!apiKey) throw new Error('NO_KEY');
 
-  const model = 'gemini-3.8-flash';
+  const model = 'gemini-2.5-flash';
   const parts = [{ text: promptText }];
   if (imageBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageBase64 } });
   const retryableStatuses = [408, 429, 500, 502, 503, 504];
@@ -3274,6 +3367,9 @@ function capitalizeFirst(s) {
 })();
 
 loadAllState();
+function syncDiaryToToday() { const today = todayStr(); if (state.selectedDate !== today) { state.selectedDate = today; ensureDayEntry(today); saveState(); renderDiary(); } }
+setInterval(syncDiaryToToday, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncDiaryToToday(); });
 renderDiary();
 </script>
 </body>
