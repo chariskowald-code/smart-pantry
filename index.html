@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#10B981" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -1767,6 +1767,7 @@ function toggleBarcodeScanner(target = 'diary') {
         showToast('Barcode erkannt: ' + scannedCode, 'info');
         try {
           const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(scannedCode)}.json`);
+          if (!r.ok) throw new Error(`Open Food Facts HTTP ${r.status}`);
           const d = await r.json();
           if (d.status !== 1 || !d.product) {
             if (targetAtScan === 'database') {
@@ -1808,7 +1809,7 @@ function toggleBarcodeScanner(target = 'diary') {
             document.getElementById('pm-name').value = item.name;
             document.getElementById('pm-lookup-input').value = item.name;
             document.getElementById('pm-amount').value = '1';
-            document.getElementById('pm-unit').value = 'Stk';
+            document.getElementById('pm-unit').value = 'Stück';
             document.getElementById('pm-portion-g').value = '100';
             document.getElementById('pm-kcal').value = item.kcal;
             document.getElementById('pm-protein').value = item.protein;
