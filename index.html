@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#10B981" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -378,7 +378,7 @@
         </div>
         <div class="text-[11px] text-slate-500">Kostenlose Rezeptdatenbank und externe Rezeptideen</div>
         <input id="discover-recipe-search" onkeydown="if(event.key==='Enter') searchExternalRecipes()" placeholder="Gericht oder Zutat suchen…" class="w-full px-3 py-2 rounded-xl bg-[#FAF9F6] border border-[#EFECE6] text-xs" />
-        <div class="flex gap-2"><button onclick="searchExternalRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-xs font-bold">5 Rezepte suchen</button><button onclick="discoverPantryRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold">Mein Vorrat</button></div>
+        <div class="flex gap-2"><button onclick="searchExternalRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-xs font-bold">5 Rezepte suchen</button><button onclick="discoverPantryRecipes()" class="flex-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold">Vorrat & Datenbanken</button></div>
         <div id="discovered-recipes-list" class="space-y-2"><p class="text-xs text-slate-400">Starte den Zutaten-Abgleich, um passende Rezeptideen zu finden.</p></div>
       </div>
       <div id="recipes-list-container" class="space-y-3"></div>
@@ -392,9 +392,14 @@
             <h2 class="text-base font-extrabold text-slate-800">Einkaufsliste</h2>
             <p class="text-xs text-slate-500">Direkt mit Schweizer DB & KI-Nährwerten verknüpft</p>
           </div>
-          <button onclick="moveCheckedShoppingToPantry()" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition shadow-sm">
-            Erledigte → Vorrat
-          </button>
+          <div class="flex flex-col gap-1.5">
+            <button onclick="addEmptyPantryToShopping()" class="px-3 py-2 rounded-xl bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200">
+              Leere Vorräte auf Liste setzen
+            </button>
+            <button onclick="moveCheckedShoppingToPantry()" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition shadow-sm">
+              Erledigte → Vorrat
+            </button>
+          </div>
         </div>
 
         <!-- Smart Shopping Input with Live Search + AI Enrich -->
@@ -685,7 +690,7 @@
 
         <!-- Add Ingredient to Recipe -->
         <div class="bg-[#FAF9F6] border border-[#EFECE6] rounded-2xl p-2.5 space-y-2">
-          <div class="text-[11px] font-bold text-slate-600">Zutat aus Vorrat oder Schweizer DB hinzufügen</div>
+          <div class="text-[11px] font-bold text-slate-600">Zutat aus Vorrat, eigenen Produkten oder Produktdatenbanken hinzufügen</div>
           <input id="re-ing-search" type="text" oninput="onRecipeIngSearch(this.value)" placeholder="Zutat suchen..." class="w-full px-3 py-2 rounded-xl bg-white border border-[#EFECE6] text-xs font-medium" />
           <div id="re-ing-results" class="hidden space-y-1 max-h-36 overflow-y-auto"></div>
         </div>
@@ -899,10 +904,14 @@ function loadAllState() {
   } catch (e) {
     state = def;
   }
-  if (!state.selectedDate) state.selectedDate = todayStr();
+  // Beim Neustart immer mit dem heutigen Tag beginnen und alle Vorratsbereiche einklappen.
+  state.selectedDate = todayStr();
+  state.collapsedStorage = Object.fromEntries(STORAGE_LOCATIONS.map(loc => [loc.key, true]));
+  state.expandedPantryItems = {};
+  selectedPantryIds.clear();
   state.productDatabase = Array.isArray(state.productDatabase) ? state.productDatabase : [];
-  // Migrate products already known from custom foods and current pantry into the permanent database.
-  [...(state.customProducts || []), ...(state.pantry || [])].forEach(p => upsertProductDatabase(p));
+  // Eigene Produkte und Vorräte in die Produktdatenbank übernehmen, ohne vorhandene Werte zu überschreiben.
+  [...(state.customProducts || []), ...(state.pantry || [])].forEach(p => ensureProductInDatabase(p));
   ensureDayEntry(state.selectedDate);
   updateAiDot();
 }
@@ -1108,6 +1117,11 @@ function findReferenceNutrition(name) {
     const pi = state.pantry.find(p => p.name.toLowerCase() === q)
       || state.pantry.find(p => p.name.toLowerCase().includes(q));
     if (pi) return { ...pi, source: 'Vorrat' };
+  }
+  if (state && Array.isArray(state.productDatabase)) {
+    const dp = state.productDatabase.find(p => p.name.toLowerCase() === q)
+      || state.productDatabase.find(p => p.name.toLowerCase().includes(q));
+    if (dp) return { ...dp, source: dp.source || 'Produktdatenbank' };
   }
   const chMatches = searchSwissDb(q, 1);
   if (chMatches.length > 0) {
@@ -1434,6 +1448,7 @@ function saveCustomDiaryFood() {
   state.customProducts = Array.isArray(state.customProducts) ? state.customProducts : [];
   state.customProducts = state.customProducts.filter(p => p.name.toLowerCase() !== name.toLowerCase());
   state.customProducts.push(product);
+  ensureProductInDatabase(product);
   saveState();
   const candidate = { ...product, type: 'Eigenes Produkt', badgeClass: 'bg-violet-100 text-violet-700' };
   currentCandidateList = [candidate];
@@ -1708,6 +1723,18 @@ function confirmAddDiaryEntry() {
   if (!selectedFoodCandidate) return;
   const amt = Math.max(0.1, Number(document.getElementById('sel-food-amount').value) || 0);
   const f = calcDiaryFactor();
+  const candidatePortionG = Math.max(1, Number(selectedFoodCandidate.portionG) || 100);
+  const per100Factor = selectedFoodCandidate.defaultUnit === 'Portion' ? 100 / candidatePortionG : 1;
+  ensureProductInDatabase({
+    name: selectedFoodCandidate.name,
+    barcode: selectedFoodCandidate.barcode || '',
+    kcal: Number(selectedFoodCandidate.kcal || 0) * per100Factor,
+    protein: Number(selectedFoodCandidate.protein || 0) * per100Factor,
+    carbs: Number(selectedFoodCandidate.carbs || 0) * per100Factor,
+    fat: Number(selectedFoodCandidate.fat || 0) * per100Factor,
+    portionG: candidatePortionG,
+    source: selectedFoodCandidate.source || selectedFoodCandidate.type || 'Tagebuch'
+  });
   ensureDayEntry(state.selectedDate);
   state.diary[state.selectedDate].meals[activeMealKey].push({
     id: uid(),
@@ -1726,6 +1753,7 @@ function confirmAddDiaryEntry() {
     if (pIdx >= 0) {
       const gramsUsed = selectedDiaryUnit === 'g' ? amt : amt * (state.pantry[pIdx].portionG || 100);
       state.pantry[pIdx].amount = Math.max(0, Math.round((state.pantry[pIdx].amount - gramsUsed) * 10) / 10);
+      if (state.pantry[pIdx].amount <= 0) addPantryItemToShopping(state.pantry[pIdx], false);
     }
   }
 
@@ -1767,6 +1795,7 @@ function toggleBarcodeScanner(target = 'diary') {
         showToast('Barcode erkannt: ' + scannedCode, 'info');
         try {
           const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(scannedCode)}.json`);
+          if (!r.ok) throw new Error(`Open Food Facts HTTP ${r.status}`);
           const d = await r.json();
           if (d.status !== 1 || !d.product) {
             if (targetAtScan === 'database') {
@@ -1808,7 +1837,7 @@ function toggleBarcodeScanner(target = 'diary') {
             document.getElementById('pm-name').value = item.name;
             document.getElementById('pm-lookup-input').value = item.name;
             document.getElementById('pm-amount').value = '1';
-            document.getElementById('pm-unit').value = 'Stk';
+            document.getElementById('pm-unit').value = 'Stück';
             document.getElementById('pm-portion-g').value = '100';
             document.getElementById('pm-kcal').value = item.kcal;
             document.getElementById('pm-protein').value = item.protein;
@@ -2017,10 +2046,46 @@ function upsertProductDatabase(product) {
   if (!state || !product || !product.name) return;
   state.productDatabase = Array.isArray(state.productDatabase) ? state.productDatabase : [];
   const key = String(product.barcode || '').trim();
-  const idx = key ? state.productDatabase.findIndex(x => String(x.barcode || '') === key) : state.productDatabase.findIndex(x => x.name.toLowerCase() === String(product.name).toLowerCase());
-  const clean = { id: product.id || uid(), name: product.name, barcode: product.barcode || '', kcal: Number(product.kcal)||0, protein: Number(product.protein)||0, carbs: Number(product.carbs)||0, fat: Number(product.fat)||0, portionG: Number(product.portionG)||100, source: product.source || 'Gespeichert' };
+  const normalizedName = String(product.name).trim().toLowerCase();
+  const idx = key
+    ? state.productDatabase.findIndex(x => String(x.barcode || '') === key)
+    : state.productDatabase.findIndex(x => String(x.name || '').trim().toLowerCase() === normalizedName);
+  const clean = { id: product.id || uid(), name: String(product.name).trim(), barcode: product.barcode || '', kcal: Number(product.kcal)||0, protein: Number(product.protein)||0, carbs: Number(product.carbs)||0, fat: Number(product.fat)||0, portionG: Number(product.portionG)||100, source: product.source || 'Gespeichert' };
   if (idx >= 0) state.productDatabase[idx] = { ...state.productDatabase[idx], ...clean, id: state.productDatabase[idx].id };
   else state.productDatabase.unshift(clean);
+}
+
+// Übernimmt Vorrats- und Tagebuchprodukte nur dann, wenn sie noch nicht existieren.
+// Bereits manuell korrigierte Nährwerte in der Produktdatenbank bleiben dadurch erhalten.
+function ensureProductInDatabase(product) {
+  if (!state || !product || !String(product.name || '').trim()) return false;
+  state.productDatabase = Array.isArray(state.productDatabase) ? state.productDatabase : [];
+  const barcode = String(product.barcode || '').trim();
+  const name = String(product.name).trim().toLocaleLowerCase('de');
+  const exists = state.productDatabase.some(p =>
+    (barcode && String(p.barcode || '').trim() === barcode) ||
+    String(p.name || '').trim().toLocaleLowerCase('de') === name
+  );
+  if (exists) return false;
+  upsertProductDatabase(product);
+  return true;
+}
+
+function updateProductDatabaseNutrition(id, field, value) {
+  const allowed = ['kcal', 'protein', 'carbs', 'fat', 'portionG'];
+  if (!allowed.includes(field)) return;
+  const product = (state.productDatabase || []).find(p => p.id === id);
+  if (!product) return;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || (field === 'portionG' && number === 0)) {
+    showToast('Bitte einen gültigen Wert ab 0 eingeben (Portion > 0)', 'error');
+    renderProductDatabase();
+    return;
+  }
+  product[field] = number;
+  saveState();
+  const summary = document.getElementById('product-db-count');
+  if (summary) summary.textContent = `${state.productDatabase.length} dauerhaft gespeicherte Produkte · Nährwerte gespeichert`;
 }
 
 function renderProductDatabase() {
@@ -2029,7 +2094,23 @@ function renderProductDatabase() {
   const q = (document.getElementById('product-db-search')?.value || '').trim().toLowerCase();
   const products = (state.productDatabase || []).filter(p => !q || p.name.toLowerCase().includes(q) || String(p.barcode||'').includes(q));
   document.getElementById('product-db-count').textContent = `${state.productDatabase.length} dauerhaft gespeicherte Produkte · ${products.length} angezeigt`;
-  list.innerHTML = products.length ? products.map(p => `<div class="rounded-xl border border-[#EFECE6] p-3 flex items-center justify-between gap-2"><div class="min-w-0"><div class="text-xs font-bold text-slate-800 truncate">${escapeHtml(p.name)}</div><div class="text-[10px] text-slate-500">${Math.round(p.kcal)} kcal · P ${p.protein}g · KH ${p.carbs}g · F ${p.fat}g pro 100 g${p.barcode ? ' · '+escapeHtml(p.barcode) : ''}</div></div><button onclick="addDatabaseProductToPantry('${p.id}')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold">In Vorrat</button></div>`).join('') : '<p class="text-xs text-slate-400 py-2">Noch keine Produkte gespeichert. Du kannst auch Produkte scannen, die du noch nicht besitzt.</p>';
+  list.innerHTML = products.length ? products.map(p => `
+    <div class="rounded-xl border border-[#EFECE6] p-3 space-y-2">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <div class="text-xs font-bold text-slate-800 break-words">${escapeHtml(p.name)}</div>
+          <div class="text-[10px] text-slate-500">${p.barcode ? 'Barcode: '+escapeHtml(p.barcode)+' · ' : ''}${escapeHtml(p.source || 'Gespeichert')}</div>
+        </div>
+        <button onclick="addDatabaseProductToPantry('${escapeAttr(p.id)}')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold">In Vorrat</button>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <label class="text-[10px] font-semibold text-slate-500">kcal / 100 g<input type="number" min="0" step="0.1" value="${Number(p.kcal)||0}" onchange="updateProductDatabaseNutrition('${escapeAttr(p.id)}','kcal',this.value)" class="block w-full mt-1 px-2 py-1.5 rounded-lg border border-[#EFECE6] text-xs font-bold text-slate-800" /></label>
+        <label class="text-[10px] font-semibold text-slate-500">Protein g<input type="number" min="0" step="0.1" value="${Number(p.protein)||0}" onchange="updateProductDatabaseNutrition('${escapeAttr(p.id)}','protein',this.value)" class="block w-full mt-1 px-2 py-1.5 rounded-lg border border-[#EFECE6] text-xs font-bold text-slate-800" /></label>
+        <label class="text-[10px] font-semibold text-slate-500">Kohlenhydrate g<input type="number" min="0" step="0.1" value="${Number(p.carbs)||0}" onchange="updateProductDatabaseNutrition('${escapeAttr(p.id)}','carbs',this.value)" class="block w-full mt-1 px-2 py-1.5 rounded-lg border border-[#EFECE6] text-xs font-bold text-slate-800" /></label>
+        <label class="text-[10px] font-semibold text-slate-500">Fett g<input type="number" min="0" step="0.1" value="${Number(p.fat)||0}" onchange="updateProductDatabaseNutrition('${escapeAttr(p.id)}','fat',this.value)" class="block w-full mt-1 px-2 py-1.5 rounded-lg border border-[#EFECE6] text-xs font-bold text-slate-800" /></label>
+        <label class="text-[10px] font-semibold text-slate-500">Portion g<input type="number" min="1" step="1" value="${Number(p.portionG)||100}" onchange="updateProductDatabaseNutrition('${escapeAttr(p.id)}','portionG',this.value)" class="block w-full mt-1 px-2 py-1.5 rounded-lg border border-[#EFECE6] text-xs font-bold text-slate-800" /></label>
+      </div>
+    </div>`).join('') : '<p class="text-xs text-slate-400 py-2">Noch keine Produkte gespeichert. Du kannst auch Produkte scannen, die du noch nicht besitzt.</p>';
 }
 
 function createDatabaseProduct() {
@@ -2217,7 +2298,9 @@ function savePantryItemModal() {
       source: 'Vorrat'
     });
   }
-  upsertProductDatabase({ name, kcal, protein, carbs, fat, portionG, source: 'Vorrat' });
+  ensureProductInDatabase({ name, kcal, protein, carbs, fat, portionG, source: 'Vorrat' });
+  const savedPantryItem = state.pantry.find(p => p.id === id) || state.pantry[state.pantry.length - 1];
+  if (savedPantryItem && Number(savedPantryItem.amount) <= 0) addPantryItemToShopping(savedPantryItem, false);
   saveState();
   closePantryItemModal();
   renderPantry();
@@ -2467,11 +2550,27 @@ function calcRecipeTotals(recipe) {
 function normalizeIngredientName(value) {
   return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ß/g,'ss').replace(/[^a-z0-9äöü ]/gi,' ').replace(/\b(frisch|gehackt|getrocknet|optional|bio|klein|gross|groß)\b/g,'').replace(/\s+/g,' ').trim().replace(/n$/,'');
 }
+function recipeCatalogProducts() {
+  const all = [
+    ...(state.pantry || []),
+    ...(state.customProducts || []),
+    ...(state.productDatabase || []),
+    ...(Array.isArray(SWISS_DB) ? SWISS_DB : [])
+  ];
+  const seen = new Set();
+  return all.filter(p => {
+    const name = String(p && p.name || '').trim();
+    const key = normalizeIngredientName(name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 function pantryIngredientNames() {
   return state.pantry.map(p => normalizeIngredientName(p.name)).filter(Boolean);
 }
 function recipeMatch(ingredients) {
-  const stock = pantryIngredientNames();
+  const stock = recipeCatalogProducts().map(p => normalizeIngredientName(p.name)).filter(Boolean);
   const names = (ingredients || []).map(x => typeof x === 'string' ? x : x.name).filter(Boolean);
   const found = [], missing = [];
   names.forEach(name => {
@@ -2530,15 +2629,14 @@ function renderDiscoveredRecipes(items) {
   const shown=items.slice(0,6);
   el.innerHTML=shown.map((r,idx)=>{
     const m=recipeMatch(r.ingredients||[]), already=state.recipes.some(x=>x.externalId&&x.externalId===r.id);
-    const section=(idx===0&&r._group==='pantry')?'<div class="text-sm font-extrabold text-emerald-700 pt-2">🥬 Rezepte mit mindestens 50 % aus deinem Vorrat</div>':(r._group==='more'&&(idx===0||items[idx-1]?._group!=='more'))?'<div class="text-sm font-extrabold text-slate-700 pt-4">🍽️ Weitere passende Rezepte</div>':'';
+    const section=(idx===0&&r._group==='pantry')?'<div class="text-sm font-extrabold text-emerald-700 pt-2">🥬 Rezepte mit mindestens 50 % Treffern in Vorrat & Datenbanken</div>':(r._group==='more'&&(idx===0||items[idx-1]?._group!=='more'))?'<div class="text-sm font-extrabold text-slate-700 pt-4">🍽️ Weitere passende Rezepte</div>':'';
     const ingredients=(r.ingredients||[]).map(x=>typeof x==='string'?x:x.name);
     return `${section}<div class="rounded-xl border border-[#EFECE6] bg-white p-3 space-y-2">
       <div class="flex gap-3">${r.image?`<img src="${escapeAttr(r.image)}" alt="" class="w-20 h-20 rounded-lg object-cover">`:''}<div class="min-w-0 flex-1"><div class="text-xs font-extrabold text-slate-800">${escapeHtml(r.name)}</div><div class="text-[10px] text-slate-500">${r.area?escapeHtml(r.area)+' · ':''}${r.category?escapeHtml(r.category):''}</div><span class="inline-block mt-1 rounded-full px-2 py-1 text-[10px] font-bold ${m.percent>=75?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">${m.percent}% · ${m.found.length}/${ingredients.length} Zutaten vorhanden</span></div></div>
       <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:${m.percent}%"></div></div>
-      <div class="text-[11px] text-emerald-700">Schon da: ${m.found.length?m.found.map(escapeHtml).join(', '):'Noch keine'}</div>
-      <div class="text-[11px] text-rose-600">Noch nötig: ${m.missing.length?m.missing.map(escapeHtml).join(', '):'Nichts'}</div>
-      ${r.nutrition?`<div class="rounded-lg bg-violet-50 px-2.5 py-2 text-[11px] text-violet-900"><b>Nährwerte geschätzt pro Portion:</b> ${Math.round(r.nutrition.perServing.kcal)} kcal · Protein ${Math.round(r.nutrition.perServing.protein)} g · KH ${Math.round(r.nutrition.perServing.carbs)} g · Fett ${Math.round(r.nutrition.perServing.fat)} g${r.nutrition.unknown?`<div class="mt-1 text-[10px]">Für ${r.nutrition.unknown} Zutat(en) fehlen Daten; Werte können zu niedrig sein.</div>`:''}</div>`:''}
-      <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-700">Zutaten & Zubereitung anzeigen</summary><ul class="mt-2 list-disc pl-4 text-slate-600">${(r.ingredients||[]).map(x=>`<li>${escapeHtml(x.name)} – ${escapeHtml(x.measure||Math.round(x.grams)+' g')}</li>`).join('')}</ul><p class="mt-2 whitespace-pre-line text-slate-600">${escapeHtml(r.instructions||'Keine Zubereitung verfügbar.')}</p></details>
+      <div class="text-[11px] text-emerald-700">In Vorrat / Datenbanken: ${m.found.length?m.found.map(escapeHtml).join(', '):'Noch keine'}</div>
+      <div class="text-[11px] text-rose-600">Nicht in deinen Datenbanken: ${m.missing.length?m.missing.map(escapeHtml).join(', '):'Nichts'}</div>
+      <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-700">Zutaten & Zubereitung anzeigen</summary><p class="mt-2 text-slate-600">${ingredients.map(x=>escapeHtml(translateKnownFood(x))).join(', ')}</p><p class="mt-2 whitespace-pre-line text-slate-600">${escapeHtml(r.instructions||'Keine Zubereitung verfügbar.')}</p></details>
       <div class="flex justify-end"><button ${already?'disabled':''} onclick="saveDiscoveredRecipe(${idx})" class="px-3 py-2 rounded-lg ${already?'bg-slate-100 text-slate-400':'bg-emerald-600 text-white'} text-[11px] font-bold">${already?'Bereits gespeichert':'In meine Rezeptdatenbank speichern'}</button></div>
     </div>`;
   }).join('');
@@ -2546,80 +2644,22 @@ function renderDiscoveredRecipes(items) {
 }
 function saveDiscoveredRecipe(index) {
   const r=(window.discoveredRecipeResults||[])[index]; if(!r||state.recipes.some(x=>x.externalId===r.id))return;
-  const ingredients=(r.ingredients||[]).map(x=>({name:translateKnownFood(typeof x==='string'?x:x.name),grams:Number((typeof x==='string'?100:x.grams)||100),kcal:Number(x.kcal)||0,protein:Number(x.protein)||0,carbs:Number(x.carbs)||0,fat:Number(x.fat)||0,nutritionKnown:x.nutritionKnown!==false,measure:x.measure||''}));
-  state.recipes.push({id:uid(),externalId:r.id,source:r.source||'TheMealDB',sourceUrl:r.url||'',name:r.name,servings:2,instructions:r.instructions||'',ingredients,nutritionEstimated:true});
+  const ingredients=(r.ingredients||[]).map(x=>({name:translateKnownFood(typeof x==='string'?x:x.name),grams:Number((typeof x==='string'?100:x.grams)||100),kcal:0,protein:0,carbs:0,fat:0}));
+  state.recipes.push({id:uid(),externalId:r.id,source:r.source||'TheMealDB',sourceUrl:r.url||'',name:r.name,servings:2,instructions:r.instructions||'',ingredients});
   saveState();renderRecipes();renderDiscoveredRecipes(window.discoveredRecipeResults||[]);showToast('Rezept in deiner Datenbank gespeichert');
 }
-function mealMeasureToGrams(name, measure) {
-  const raw=String(measure||'').trim().toLowerCase();
-  if(!raw) return getSuggestedPortionGrams(name,100);
-  const m=raw.match(/(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)/);
-  let amount=1;
-  if(m){const token=m[0].replace(/\s/g,'');amount=token.includes('/')?Number(token.split('/')[0])/Number(token.split('/')[1]):Number(token.replace(',','.'));}
-  const unit=raw.replace(m?m[0]:'','').trim();
-  if(/\bkg\b|kilogram/.test(unit))return amount*1000;
-  if(/\bml\b|milliliter/.test(unit))return amount;
-  if(/\bliter|\bl\b/.test(unit))return amount*1000;
-  if(/\b(g|gram|grams)\b/.test(unit))return amount;
-  if(/tablespoon|tbsp|esslöffel|essloeffel/.test(unit))return amount*15;
-  if(/teaspoon|tsp|teelöffel|teeloeffel/.test(unit))return amount*5;
-  if(/cup|tasse/.test(unit))return amount*240;
-  if(/clove|zehe/.test(unit))return amount*getSuggestedPortionGrams(name,5);
-  if(/slice|scheibe/.test(unit))return amount*getSuggestedPortionGrams(name,30);
-  if(/pinch|prise/.test(unit))return amount*0.5;
-  if(/can|tin|dose|pack|bunch|bund/.test(unit))return amount*getSuggestedPortionGrams(name,150);
-  if(/whole|piece|stuck|stück|large|medium|small/.test(unit))return amount*getSuggestedPortionGrams(name,100);
-  return getSuggestedPortionGrams(name,100);
-}
-function nutritionForIngredient(name) {
-  // TheMealDB often gives compound names such as "chicken breast" or "fresh tomatoes".
-  const de = translateKnownFood(name);
-  const direct = findReferenceNutrition(de) || findReferenceNutrition(name);
-  if (direct && Number(direct.kcal) > 0) return {
-    kcal:Number(direct.kcal)||0, protein:Number(direct.protein)||0,
-    carbs:Number(direct.carbs)||0, fat:Number(direct.fat)||0,
-    nutritionKnown:true, nutritionSource:direct.source||'Lebensmitteldatenbank'
-  };
-  const clean = normalizeIngredientName(de)
-    .replace(/\b(fresh|dried|canned|chopped|minced|boneless|skinless|breast|thigh|fillet|large|medium|small|raw|cooked|freshly|ground|grated|sliced|plain|whole|low fat|full fat)\b/g,' ')
-    .replace(/\s+/g,' ').trim();
-  const tokens = clean.split(' ').filter(t=>t.length>2 && !['and','the','for'].includes(t));
-  let best = null, bestScore = -1;
-  for (let n=tokens.length; n>=1; n--) {
-    const phrase = tokens.slice(0,n).join(' ');
-    const hits = searchSwissDb(phrase, 20);
-    for (const hit of hits) {
-      if (!(Number(hit.kcal)>0)) continue;
-      const label = normalizeIngredientName(hit.name+' '+(hit.synonyms||''));
-      let score = 10 - Math.abs(label.split(' ').length - n);
-      if (label.startsWith(phrase)) score += 8;
-      if (label.split(' ').some(t=>t===tokens[0])) score += 4;
-      if (score > bestScore) { best=hit; bestScore=score; }
-    }
-    if (best && bestScore >= 18) break;
-  }
-  return best ? {
-    kcal:Number(best.kcal)||0, protein:Number(best.protein)||0,
-    carbs:Number(best.carbs)||0, fat:Number(best.fat)||0,
-    nutritionKnown:true, nutritionSource:'CH-DB (ähnliches Lebensmittel: '+best.name+')'
-  } : {kcal:0,protein:0,carbs:0,fat:0,nutritionKnown:false,nutritionSource:''};
-}
 async function mealDetails(meal) {
-  const rawIngredients=[];
-  for(let i=1;i<=20;i++){
-    const raw=(meal['strIngredient'+i]||'').trim();
-    if(raw){const name=await translateMealText(raw);const grams=mealMeasureToGrams(name,meal['strMeasure'+i]||'');const n=nutritionForIngredient(name);rawIngredients.push({name,grams,...n,measure:(meal['strMeasure'+i]||'').trim()});}
-  }
-  const translated=await Promise.all([translateMealText(meal.strMeal||''),translateMealText(meal.strInstructions||''),translateMealText(meal.strCategory||'')]);
-  const totals=rawIngredients.reduce((a,x)=>{const f=x.grams/100;a.kcal+=x.kcal*f;a.protein+=x.protein*f;a.carbs+=x.carbs*f;a.fat+=x.fat*f;a.weight+=x.grams;if(!x.nutritionKnown)a.unknown++;return a;},{kcal:0,protein:0,carbs:0,fat:0,weight:0,unknown:0});
-  return {id:meal.idMeal,name:translated[0]||meal.strMeal,ingredients:rawIngredients,instructions:translated[1]||meal.strInstructions||'',image:meal.strMealThumb||'',area:meal.strArea||'',category:translated[2]||'',url:meal.strSource||'',source:'TheMealDB',nutrition:{...totals,servings:2,perServing:{kcal:totals.kcal/2,protein:totals.protein/2,carbs:totals.carbs/2,fat:totals.fat/2},estimated:true}};
+  const rawIngredients=[];for(let i=1;i<=20;i++){const name=(meal['strIngredient'+i]||'').trim();if(name)rawIngredients.push(name);}
+  const translated=await Promise.all([translateMealText(meal.strMeal||''),translateMealText(meal.strInstructions||''),...rawIngredients.map(translateMealText),translateMealText(meal.strCategory||'')]);
+  return {id:meal.idMeal,name:translated[0]||meal.strMeal,ingredients:translated.slice(2,-1).map(name=>({name,grams:100})),instructions:translated[1]||meal.strInstructions||'',image:meal.strMealThumb||'',area:meal.strArea||'',category:translated[translated.length-1]||'',url:meal.strSource||'',source:'TheMealDB'};
 }
 async function discoverPantryRecipes() {
   const btn=document.getElementById('discover-recipes-btn'),out=document.getElementById('discovered-recipes-list');
-  if(!state.pantry.length){out.innerHTML='<p class="text-xs text-slate-500">Dein Vorrat ist noch leer. Füge zuerst Produkte hinzu.</p>';return;}
-  btn.disabled=true;btn.textContent='Suche…';out.innerHTML='<p class="text-xs text-slate-500">Suche passende Rezepte…</p>';
+  const catalog = recipeCatalogProducts();
+  if(!catalog.length){out.innerHTML='<p class="text-xs text-slate-500">Noch keine Produkte in Vorrat oder Datenbanken gefunden. Ergänze zuerst eigene Produkte oder nutze die Schweizer Datenbank.</p>';return;}
+  btn.disabled=true;btn.textContent='Suche…';out.innerHTML='<p class="text-xs text-slate-500">Suche passende Rezepte anhand deiner Produktdatenbanken…</p>';
   try{
-    const terms=[...new Set(state.pantry.slice(0,8).map(p=>p.name.split(/[ ,]/)[0]).filter(Boolean))];const found=new Map();
+    const terms=[...new Set(catalog.slice(0,12).map(p=>String(p.name).split(/[ ,]/)[0]).filter(Boolean))];const found=new Map();
     for(const term of terms.slice(0,5)){const english=Object.entries(mealDe).find(([,de])=>de.toLowerCase()===term.toLowerCase())?.[0]||term;const res=await fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(english));if(res.ok){const d=await res.json();(d.meals||[]).forEach(m=>found.set(m.idMeal,m));}}
     const details=await Promise.all([...found.values()].slice(0,12).map(async m=>{const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(m.idMeal));if(!res.ok)return null;const d=await res.json();return d.meals&&d.meals[0]?mealDetails(d.meals[0]):null;}));
     const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);renderDiscoveredRecipes(selectSixRecipes(results));
@@ -2627,49 +2667,40 @@ async function discoverPantryRecipes() {
 }
 async function searchExternalRecipes() {
   const input=document.getElementById('discover-recipe-search');
-  const q=(input.value||'').trim()||state.pantry.slice(0,3).map(p=>p.name).join(' ');
+  const q=(input.value||'').trim()||recipeCatalogProducts().slice(0,3).map(p=>p.name).join(' ');
   if(!q){showToast('Bitte einen Suchbegriff eingeben');return;}
   const out=document.getElementById('discovered-recipes-list');
-  out.innerHTML='<p class="text-xs text-slate-500">Suche nach Rezepten mit möglichst vielen deiner Suchzutaten…</p>';
+  out.innerHTML='<p class="text-xs text-slate-500">Suche bis zu sechs passende Rezepte…</p>';
   try{
-    const highProteinIntent=/high\s*protein|proteinreich|eiweißreich|eiweissreich/i.test(q);
-    const stop=new Set(['und','mit','ohne','für','fuer','der','die','das','ein','eine','zum','zur','schnell','einfach','high','protein','proteinreich','eiweißreich','eiweissreich']);
-    const rawTerms=q.toLowerCase().split(/[^a-zäöüß]+/i).filter(t=>t.length>2&&!stop.has(t));
-    const deToEn={karfiol:'cauliflower',blumenkohl:'cauliflower',brokkoli:'broccoli',kartoffel:'potato',kartoffeln:'potato',tomate:'tomato',tomaten:'tomato',zwiebel:'onion',zwiebeln:'onion',knoblauch:'garlic',karotte:'carrot',karotten:'carrot',möhre:'carrot',paprika:'pepper',huhn:'chicken',hähnchen:'chicken',rind:'beef',rindfleisch:'beef',schwein:'pork',schweinefleisch:'pork',reis:'rice',nudel:'pasta',nudeln:'pasta',käse:'cheese',ei:'egg',eier:'egg',milch:'milk',sahne:'cream',butter:'butter',spinat:'spinach',pilz:'mushroom',pilze:'mushroom',zucchini:'zucchini',melanzani:'aubergine',aubergine:'aubergine',gurke:'cucumber',zitrone:'lemon',petersilie:'parsley',basilikum:'basil',mehl:'flour',brot:'bread',bohne:'bean',bohnen:'beans',linse:'lentil',linsen:'lentils',kichererbse:'chickpea',kichererbsen:'chickpeas',lachs:'salmon',thunfisch:'tuna',garnele:'shrimp',apfel:'apple',banane:'banana',haferflocken:'oats',joghurt:'yogurt',olivenöl:'olive oil'};
-    const queryTerms=[...new Set(rawTerms.map(t=>deToEn[t]||Object.entries(mealDe).find(([,de])=>de.toLowerCase()===t)?.[0]||t))].slice(0,5);
+    const terms=[...new Set(q.split(/[ ,]+/).filter(Boolean))];
     const found=new Map();
-    // Search both the complete phrase as a dish title and individual ingredient terms.
-    const requests=[fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(q))];
-    for(const term of queryTerms) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(term)));
+    const translatedTerms=terms.map(term=>Object.entries(mealDe).find(([,de])=>de.toLowerCase()===term.toLowerCase())?.[0]||term);
+    // Zuerst nach Rezeptnamen suchen, danach zusätzlich nach einzelnen Zutaten.
+    const requests=[];
+    if(terms.length===1) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(q)));
+    for(const term of translatedTerms.slice(0,3)) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(term)));
     const responses=await Promise.allSettled(requests);
     for(const response of responses){
-      if(response.status!=='fulfilled'||!response.value.ok)continue;
+      if(response.status!=='fulfilled'||!response.value.ok) continue;
       const data=await response.value.json();
       (data.meals||[]).forEach(meal=>found.set(meal.idMeal,meal));
     }
-    if(!found.size){renderDiscoveredRecipes([]);return;}
-    const candidates=[...found.values()].slice(0,30);
+    const candidates=[...found.values()].slice(0,20);
     const details=await Promise.all(candidates.map(async meal=>{
       const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(meal.idMeal));
       if(!res.ok)return null;
       const data=await res.json();
-      if(!data.meals||!data.meals[0])return null;
-      const detail=await mealDetails(data.meals[0]);
-      const ingredientTerms=(data.meals[0]&&Array.from({length:20},(_,i)=>(data.meals[0]['strIngredient'+(i+1)]||'').trim().toLowerCase()).filter(Boolean))||[];
-      const matched=queryTerms.filter(term=>ingredientTerms.some(ing=>ing===term||ing.includes(term)||term.includes(ing)));
-      const titleMatch=q.length>2&&detail.name.toLowerCase().includes(q.toLowerCase())?1:0;
-      return {...detail,_queryMatches:matched.length,_queryTotal:queryTerms.length,_titleMatch:titleMatch};
+      return data.meals&&data.meals[0]?mealDetails(data.meals[0]):null;
     }));
-    const relevant=details.filter(Boolean).filter(r=>r._queryMatches>0||r._titleMatch>0);
-    relevant.sort((a,b)=>b._queryMatches-a._queryMatches||b._titleMatch-a._titleMatch||(highProteinIntent?(b.nutrition?.perServing.protein||0)-(a.nutrition?.perServing.protein||0):0)||recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);
-    const selected=selectSixRecipes(relevant);
-    renderDiscoveredRecipes(selected);
-    if(relevant.length)out.insertAdjacentHTML('afterbegin','<p class="text-xs text-slate-500">'+selected.length+' von '+relevant.length+' passenden Rezepten – zuerst nach Suchzutaten, dann Vorrat'+(highProteinIntent?' und Eiweißgehalt':'')+' sortiert. Nährwerte sind Schätzungen aus der eingebauten Lebensmitteldatenbank.</p>');
+    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);
+    renderDiscoveredRecipes(selectSixRecipes(results));
+    if(results.length) out.insertAdjacentHTML('afterbegin','<p class="text-xs text-slate-500">'+Math.min(5,results.length)+' von '+results.length+' gefundenen Rezepten – nach Vorrats-Treffern sortiert</p>');
   }catch(e){
     console.error(e);
     out.innerHTML='<p class="text-xs text-rose-600">Die Rezeptsuche ist gerade nicht erreichbar. Bitte später erneut versuchen.</p>';
   }
 }
+
 function renderRecipes() {
   const q = (document.getElementById('recipe-search-input').value || '').trim().toLowerCase();
   const list = state.recipes.filter(r => {
@@ -2791,15 +2822,19 @@ function onRecipeIngSearch(val) {
   const box = document.getElementById('re-ing-results');
   if (!q) { box.classList.add('hidden'); return; }
   const out = [];
-  state.pantry.forEach(p => {
-    if (p.name.toLowerCase().includes(q)) {
-      out.push({ name: p.name, kcal: p.kcal, protein: p.protein, carbs: p.carbs, fat: p.fat, badge: 'Vorrat' });
-    }
-  });
-  searchSwissDb(q, 8).forEach(ch => {
-    out.push({ name: ch.name, kcal: ch.kcal, protein: ch.protein, carbs: ch.carbs, fat: ch.fat, badge: ch.source });
-  });
-  reIngCandidates = out;
+  const seen = new Set();
+  const addCandidate = (p, badge) => {
+    if (!p || !p.name || !p.name.toLowerCase().includes(q)) return;
+    const key = p.name.trim().toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ name: p.name, kcal: Number(p.kcal)||0, protein: Number(p.protein)||0, carbs: Number(p.carbs)||0, fat: Number(p.fat)||0, badge });
+  };
+  (state.pantry || []).forEach(p => addCandidate(p, 'Vorrat'));
+  (state.customProducts || []).forEach(p => addCandidate(p, 'Eigenes Produkt'));
+  (state.productDatabase || []).forEach(p => addCandidate(p, 'Produktdatenbank'));
+  searchSwissDb(q, 12).forEach(p => addCandidate(p, p.source || 'Schweizer DB'));
+  reIngCandidates = out.slice(0, 20);
   if (!out.length) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   box.innerHTML = out.map((c, idx) => `
@@ -2912,9 +2947,10 @@ function setAiRecipeMode(mode) {
 
 async function generateAiRecipe() {
   const wish = document.getElementById('ai-recipe-prompt').value.trim();
-  const pool = selectedPantryIds.size > 0
+  const pantryPool = selectedPantryIds.size > 0
     ? state.pantry.filter(p => selectedPantryIds.has(p.id))
     : state.pantry;
+  const pool = pantryPool.length ? pantryPool : recipeCatalogProducts().slice(0, 12);
 
   if (!state.geminiApiKey || state.geminiApiKey.trim().length < 10) {
     // Fallback smart combination from pantry
@@ -3147,6 +3183,46 @@ function deleteShoppingItem(id) {
   renderShopping();
 }
 
+function addPantryItemToShopping(pantryItem, notify = true) {
+  if (!pantryItem) return false;
+  state.shopping = Array.isArray(state.shopping) ? state.shopping : [];
+  const exists = state.shopping.some(s =>
+    (s.pantryId && s.pantryId === pantryItem.id) ||
+    (String(s.name || '').trim().toLowerCase() === String(pantryItem.name || '').trim().toLowerCase() &&
+     (s.source || '') === 'Leerer Vorrat' && !s.checked)
+  );
+  if (exists) return false;
+  const unit = pantryItem.unit || 'g';
+  state.shopping.push({
+    id: uid(),
+    pantryId: pantryItem.id,
+    name: pantryItem.name,
+    amount: (unit === 'g' || unit === 'ml') ? 100 : 1,
+    unit,
+    checked: false,
+    kcal: Number(pantryItem.kcal) || 0,
+    protein: Number(pantryItem.protein) || 0,
+    carbs: Number(pantryItem.carbs) || 0,
+    fat: Number(pantryItem.fat) || 0,
+    storage: pantryItem.storage || inferStorageLocation(pantryItem.name),
+    source: 'Leerer Vorrat'
+  });
+  if (notify) showToast(`"${pantryItem.name}" auf die Einkaufsliste gesetzt`);
+  return true;
+}
+
+function addEmptyPantryToShopping() {
+  const emptyItems = (state.pantry || []).filter(p => Number(p.amount) <= 0);
+  if (!emptyItems.length) {
+    showToast('Keine leeren Vorräte gefunden', 'info');
+    return;
+  }
+  const added = emptyItems.reduce((count, item) => count + (addPantryItemToShopping(item, false) ? 1 : 0), 0);
+  saveState();
+  renderShopping();
+  showToast(added ? `${added} leere Vorräte auf die Einkaufsliste gesetzt` : 'Alle leeren Vorräte stehen bereits auf der Einkaufsliste', 'info');
+}
+
 function moveCheckedShoppingToPantry() {
   const done = state.shopping.filter(s => s.checked);
   if (!done.length) {
@@ -3154,19 +3230,26 @@ function moveCheckedShoppingToPantry() {
     return;
   }
   done.forEach(s => {
-    state.pantry.push(migratePantryItem({
-      id: uid(),
-      name: s.name,
-      amount: s.amount || 100,
-      unit: s.unit || 'g',
-      portionG: 100,
-      kcal: s.kcal,
-      protein: s.protein,
-      carbs: s.carbs,
-      fat: s.fat,
-      storage: s.storage || inferStorageLocation(s.name),
-      source: s.source || 'Einkauf'
-    }));
+    const existing = s.pantryId ? state.pantry.find(p => p.id === s.pantryId) : null;
+    if (existing) {
+      existing.amount = Math.max(0, Number(existing.amount) || 0) + (Number(s.amount) || 100);
+    } else {
+      state.pantry.push(migratePantryItem({
+        id: uid(),
+        name: s.name,
+        amount: s.amount || 100,
+        unit: s.unit || 'g',
+        portionG: 100,
+        kcal: s.kcal,
+        protein: s.protein,
+        carbs: s.carbs,
+        fat: s.fat,
+        storage: s.storage || inferStorageLocation(s.name),
+        source: s.source || 'Einkauf'
+      }));
+    }
+    const restored = existing || state.pantry[state.pantry.length - 1];
+    ensureProductInDatabase(restored);
   });
   state.shopping = state.shopping.filter(s => !s.checked);
   saveState();
@@ -3653,9 +3736,6 @@ function capitalizeFirst(s) {
 })();
 
 loadAllState();
-function syncDiaryToToday() { const today = todayStr(); if (state.selectedDate !== today) { state.selectedDate = today; ensureDayEntry(today); saveState(); renderDiary(); } }
-setInterval(syncDiaryToToday, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) syncDiaryToToday(); });
 renderDiary();
 </script>
 </body>
