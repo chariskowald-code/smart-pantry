@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#10B981" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -1767,7 +1767,6 @@ function toggleBarcodeScanner(target = 'diary') {
         showToast('Barcode erkannt: ' + scannedCode, 'info');
         try {
           const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(scannedCode)}.json`);
-          if (!r.ok) throw new Error(`Open Food Facts HTTP ${r.status}`);
           const d = await r.json();
           if (d.status !== 1 || !d.product) {
             if (targetAtScan === 'database') {
@@ -1809,7 +1808,7 @@ function toggleBarcodeScanner(target = 'diary') {
             document.getElementById('pm-name').value = item.name;
             document.getElementById('pm-lookup-input').value = item.name;
             document.getElementById('pm-amount').value = '1';
-            document.getElementById('pm-unit').value = 'Stück';
+            document.getElementById('pm-unit').value = 'Stk';
             document.getElementById('pm-portion-g').value = '100';
             document.getElementById('pm-kcal').value = item.kcal;
             document.getElementById('pm-protein').value = item.protein;
@@ -2538,7 +2537,8 @@ function renderDiscoveredRecipes(items) {
       <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:${m.percent}%"></div></div>
       <div class="text-[11px] text-emerald-700">Schon da: ${m.found.length?m.found.map(escapeHtml).join(', '):'Noch keine'}</div>
       <div class="text-[11px] text-rose-600">Noch nötig: ${m.missing.length?m.missing.map(escapeHtml).join(', '):'Nichts'}</div>
-      <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-700">Zutaten & Zubereitung anzeigen</summary><p class="mt-2 text-slate-600">${ingredients.map(x=>escapeHtml(translateKnownFood(x))).join(', ')}</p><p class="mt-2 whitespace-pre-line text-slate-600">${escapeHtml(r.instructions||'Keine Zubereitung verfügbar.')}</p></details>
+      ${r.nutrition?`<div class="rounded-lg bg-violet-50 px-2.5 py-2 text-[11px] text-violet-900"><b>Nährwerte geschätzt pro Portion:</b> ${Math.round(r.nutrition.perServing.kcal)} kcal · Protein ${Math.round(r.nutrition.perServing.protein)} g · KH ${Math.round(r.nutrition.perServing.carbs)} g · Fett ${Math.round(r.nutrition.perServing.fat)} g${r.nutrition.unknown?`<div class="mt-1 text-[10px]">Für ${r.nutrition.unknown} Zutat(en) fehlen Daten; Werte können zu niedrig sein.</div>`:''}</div>`:''}
+      <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-700">Zutaten & Zubereitung anzeigen</summary><ul class="mt-2 list-disc pl-4 text-slate-600">${(r.ingredients||[]).map(x=>`<li>${escapeHtml(x.name)} – ${escapeHtml(x.measure||Math.round(x.grams)+' g')}</li>`).join('')}</ul><p class="mt-2 whitespace-pre-line text-slate-600">${escapeHtml(r.instructions||'Keine Zubereitung verfügbar.')}</p></details>
       <div class="flex justify-end"><button ${already?'disabled':''} onclick="saveDiscoveredRecipe(${idx})" class="px-3 py-2 rounded-lg ${already?'bg-slate-100 text-slate-400':'bg-emerald-600 text-white'} text-[11px] font-bold">${already?'Bereits gespeichert':'In meine Rezeptdatenbank speichern'}</button></div>
     </div>`;
   }).join('');
@@ -2546,14 +2546,73 @@ function renderDiscoveredRecipes(items) {
 }
 function saveDiscoveredRecipe(index) {
   const r=(window.discoveredRecipeResults||[])[index]; if(!r||state.recipes.some(x=>x.externalId===r.id))return;
-  const ingredients=(r.ingredients||[]).map(x=>({name:translateKnownFood(typeof x==='string'?x:x.name),grams:Number((typeof x==='string'?100:x.grams)||100),kcal:0,protein:0,carbs:0,fat:0}));
-  state.recipes.push({id:uid(),externalId:r.id,source:r.source||'TheMealDB',sourceUrl:r.url||'',name:r.name,servings:2,instructions:r.instructions||'',ingredients});
+  const ingredients=(r.ingredients||[]).map(x=>({name:translateKnownFood(typeof x==='string'?x:x.name),grams:Number((typeof x==='string'?100:x.grams)||100),kcal:Number(x.kcal)||0,protein:Number(x.protein)||0,carbs:Number(x.carbs)||0,fat:Number(x.fat)||0,nutritionKnown:x.nutritionKnown!==false,measure:x.measure||''}));
+  state.recipes.push({id:uid(),externalId:r.id,source:r.source||'TheMealDB',sourceUrl:r.url||'',name:r.name,servings:2,instructions:r.instructions||'',ingredients,nutritionEstimated:true});
   saveState();renderRecipes();renderDiscoveredRecipes(window.discoveredRecipeResults||[]);showToast('Rezept in deiner Datenbank gespeichert');
 }
+function mealMeasureToGrams(name, measure) {
+  const raw=String(measure||'').trim().toLowerCase();
+  if(!raw) return getSuggestedPortionGrams(name,100);
+  const m=raw.match(/(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)/);
+  let amount=1;
+  if(m){const token=m[0].replace(/\s/g,'');amount=token.includes('/')?Number(token.split('/')[0])/Number(token.split('/')[1]):Number(token.replace(',','.'));}
+  const unit=raw.replace(m?m[0]:'','').trim();
+  if(/\bkg\b|kilogram/.test(unit))return amount*1000;
+  if(/\bml\b|milliliter/.test(unit))return amount;
+  if(/\bliter|\bl\b/.test(unit))return amount*1000;
+  if(/\b(g|gram|grams)\b/.test(unit))return amount;
+  if(/tablespoon|tbsp|esslöffel|essloeffel/.test(unit))return amount*15;
+  if(/teaspoon|tsp|teelöffel|teeloeffel/.test(unit))return amount*5;
+  if(/cup|tasse/.test(unit))return amount*240;
+  if(/clove|zehe/.test(unit))return amount*getSuggestedPortionGrams(name,5);
+  if(/slice|scheibe/.test(unit))return amount*getSuggestedPortionGrams(name,30);
+  if(/pinch|prise/.test(unit))return amount*0.5;
+  if(/can|tin|dose|pack|bunch|bund/.test(unit))return amount*getSuggestedPortionGrams(name,150);
+  if(/whole|piece|stuck|stück|large|medium|small/.test(unit))return amount*getSuggestedPortionGrams(name,100);
+  return getSuggestedPortionGrams(name,100);
+}
+function nutritionForIngredient(name) {
+  // TheMealDB often gives compound names such as "chicken breast" or "fresh tomatoes".
+  const de = translateKnownFood(name);
+  const direct = findReferenceNutrition(de) || findReferenceNutrition(name);
+  if (direct && Number(direct.kcal) > 0) return {
+    kcal:Number(direct.kcal)||0, protein:Number(direct.protein)||0,
+    carbs:Number(direct.carbs)||0, fat:Number(direct.fat)||0,
+    nutritionKnown:true, nutritionSource:direct.source||'Lebensmitteldatenbank'
+  };
+  const clean = normalizeIngredientName(de)
+    .replace(/\b(fresh|dried|canned|chopped|minced|boneless|skinless|breast|thigh|fillet|large|medium|small|raw|cooked|freshly|ground|grated|sliced|plain|whole|low fat|full fat)\b/g,' ')
+    .replace(/\s+/g,' ').trim();
+  const tokens = clean.split(' ').filter(t=>t.length>2 && !['and','the','for'].includes(t));
+  let best = null, bestScore = -1;
+  for (let n=tokens.length; n>=1; n--) {
+    const phrase = tokens.slice(0,n).join(' ');
+    const hits = searchSwissDb(phrase, 20);
+    for (const hit of hits) {
+      if (!(Number(hit.kcal)>0)) continue;
+      const label = normalizeIngredientName(hit.name+' '+(hit.synonyms||''));
+      let score = 10 - Math.abs(label.split(' ').length - n);
+      if (label.startsWith(phrase)) score += 8;
+      if (label.split(' ').some(t=>t===tokens[0])) score += 4;
+      if (score > bestScore) { best=hit; bestScore=score; }
+    }
+    if (best && bestScore >= 18) break;
+  }
+  return best ? {
+    kcal:Number(best.kcal)||0, protein:Number(best.protein)||0,
+    carbs:Number(best.carbs)||0, fat:Number(best.fat)||0,
+    nutritionKnown:true, nutritionSource:'CH-DB (ähnliches Lebensmittel: '+best.name+')'
+  } : {kcal:0,protein:0,carbs:0,fat:0,nutritionKnown:false,nutritionSource:''};
+}
 async function mealDetails(meal) {
-  const rawIngredients=[];for(let i=1;i<=20;i++){const name=(meal['strIngredient'+i]||'').trim();if(name)rawIngredients.push(name);}
-  const translated=await Promise.all([translateMealText(meal.strMeal||''),translateMealText(meal.strInstructions||''),...rawIngredients.map(translateMealText),translateMealText(meal.strCategory||'')]);
-  return {id:meal.idMeal,name:translated[0]||meal.strMeal,ingredients:translated.slice(2,-1).map(name=>({name,grams:100})),instructions:translated[1]||meal.strInstructions||'',image:meal.strMealThumb||'',area:meal.strArea||'',category:translated[translated.length-1]||'',url:meal.strSource||'',source:'TheMealDB'};
+  const rawIngredients=[];
+  for(let i=1;i<=20;i++){
+    const raw=(meal['strIngredient'+i]||'').trim();
+    if(raw){const name=await translateMealText(raw);const grams=mealMeasureToGrams(name,meal['strMeasure'+i]||'');const n=nutritionForIngredient(name);rawIngredients.push({name,grams,...n,measure:(meal['strMeasure'+i]||'').trim()});}
+  }
+  const translated=await Promise.all([translateMealText(meal.strMeal||''),translateMealText(meal.strInstructions||''),translateMealText(meal.strCategory||'')]);
+  const totals=rawIngredients.reduce((a,x)=>{const f=x.grams/100;a.kcal+=x.kcal*f;a.protein+=x.protein*f;a.carbs+=x.carbs*f;a.fat+=x.fat*f;a.weight+=x.grams;if(!x.nutritionKnown)a.unknown++;return a;},{kcal:0,protein:0,carbs:0,fat:0,weight:0,unknown:0});
+  return {id:meal.idMeal,name:translated[0]||meal.strMeal,ingredients:rawIngredients,instructions:translated[1]||meal.strInstructions||'',image:meal.strMealThumb||'',area:meal.strArea||'',category:translated[2]||'',url:meal.strSource||'',source:'TheMealDB',nutrition:{...totals,servings:2,perServing:{kcal:totals.kcal/2,protein:totals.protein/2,carbs:totals.carbs/2,fat:totals.fat/2},estimated:true}};
 }
 async function discoverPantryRecipes() {
   const btn=document.getElementById('discover-recipes-btn'),out=document.getElementById('discovered-recipes-list');
@@ -2571,37 +2630,46 @@ async function searchExternalRecipes() {
   const q=(input.value||'').trim()||state.pantry.slice(0,3).map(p=>p.name).join(' ');
   if(!q){showToast('Bitte einen Suchbegriff eingeben');return;}
   const out=document.getElementById('discovered-recipes-list');
-  out.innerHTML='<p class="text-xs text-slate-500">Suche bis zu sechs passende Rezepte…</p>';
+  out.innerHTML='<p class="text-xs text-slate-500">Suche nach Rezepten mit möglichst vielen deiner Suchzutaten…</p>';
   try{
-    const terms=[...new Set(q.split(/[ ,]+/).filter(Boolean))];
+    const highProteinIntent=/high\s*protein|proteinreich|eiweißreich|eiweissreich/i.test(q);
+    const stop=new Set(['und','mit','ohne','für','fuer','der','die','das','ein','eine','zum','zur','schnell','einfach','high','protein','proteinreich','eiweißreich','eiweissreich']);
+    const rawTerms=q.toLowerCase().split(/[^a-zäöüß]+/i).filter(t=>t.length>2&&!stop.has(t));
+    const deToEn={karfiol:'cauliflower',blumenkohl:'cauliflower',brokkoli:'broccoli',kartoffel:'potato',kartoffeln:'potato',tomate:'tomato',tomaten:'tomato',zwiebel:'onion',zwiebeln:'onion',knoblauch:'garlic',karotte:'carrot',karotten:'carrot',möhre:'carrot',paprika:'pepper',huhn:'chicken',hähnchen:'chicken',rind:'beef',rindfleisch:'beef',schwein:'pork',schweinefleisch:'pork',reis:'rice',nudel:'pasta',nudeln:'pasta',käse:'cheese',ei:'egg',eier:'egg',milch:'milk',sahne:'cream',butter:'butter',spinat:'spinach',pilz:'mushroom',pilze:'mushroom',zucchini:'zucchini',melanzani:'aubergine',aubergine:'aubergine',gurke:'cucumber',zitrone:'lemon',petersilie:'parsley',basilikum:'basil',mehl:'flour',brot:'bread',bohne:'bean',bohnen:'beans',linse:'lentil',linsen:'lentils',kichererbse:'chickpea',kichererbsen:'chickpeas',lachs:'salmon',thunfisch:'tuna',garnele:'shrimp',apfel:'apple',banane:'banana',haferflocken:'oats',joghurt:'yogurt',olivenöl:'olive oil'};
+    const queryTerms=[...new Set(rawTerms.map(t=>deToEn[t]||Object.entries(mealDe).find(([,de])=>de.toLowerCase()===t)?.[0]||t))].slice(0,5);
     const found=new Map();
-    const translatedTerms=terms.map(term=>Object.entries(mealDe).find(([,de])=>de.toLowerCase()===term.toLowerCase())?.[0]||term);
-    // Zuerst nach Rezeptnamen suchen, danach zusätzlich nach einzelnen Zutaten.
-    const requests=[];
-    if(terms.length===1) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(q)));
-    for(const term of translatedTerms.slice(0,3)) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(term)));
+    // Search both the complete phrase as a dish title and individual ingredient terms.
+    const requests=[fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(q))];
+    for(const term of queryTerms) requests.push(fetch('https://www.themealdb.com/api/json/v1/1/filter.php?i='+encodeURIComponent(term)));
     const responses=await Promise.allSettled(requests);
     for(const response of responses){
-      if(response.status!=='fulfilled'||!response.value.ok) continue;
+      if(response.status!=='fulfilled'||!response.value.ok)continue;
       const data=await response.value.json();
       (data.meals||[]).forEach(meal=>found.set(meal.idMeal,meal));
     }
-    const candidates=[...found.values()].slice(0,20);
+    if(!found.size){renderDiscoveredRecipes([]);return;}
+    const candidates=[...found.values()].slice(0,30);
     const details=await Promise.all(candidates.map(async meal=>{
       const res=await fetch('https://www.themealdb.com/api/json/v1/1/lookup.php?i='+encodeURIComponent(meal.idMeal));
       if(!res.ok)return null;
       const data=await res.json();
-      return data.meals&&data.meals[0]?mealDetails(data.meals[0]):null;
+      if(!data.meals||!data.meals[0])return null;
+      const detail=await mealDetails(data.meals[0]);
+      const ingredientTerms=(data.meals[0]&&Array.from({length:20},(_,i)=>(data.meals[0]['strIngredient'+(i+1)]||'').trim().toLowerCase()).filter(Boolean))||[];
+      const matched=queryTerms.filter(term=>ingredientTerms.some(ing=>ing===term||ing.includes(term)||term.includes(ing)));
+      const titleMatch=q.length>2&&detail.name.toLowerCase().includes(q.toLowerCase())?1:0;
+      return {...detail,_queryMatches:matched.length,_queryTotal:queryTerms.length,_titleMatch:titleMatch};
     }));
-    const results=details.filter(Boolean).sort((a,b)=>recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);
-    renderDiscoveredRecipes(selectSixRecipes(results));
-    if(results.length) out.insertAdjacentHTML('afterbegin','<p class="text-xs text-slate-500">'+Math.min(5,results.length)+' von '+results.length+' gefundenen Rezepten – nach Vorrats-Treffern sortiert</p>');
+    const relevant=details.filter(Boolean).filter(r=>r._queryMatches>0||r._titleMatch>0);
+    relevant.sort((a,b)=>b._queryMatches-a._queryMatches||b._titleMatch-a._titleMatch||(highProteinIntent?(b.nutrition?.perServing.protein||0)-(a.nutrition?.perServing.protein||0):0)||recipeMatch(b.ingredients).percent-recipeMatch(a.ingredients).percent);
+    const selected=selectSixRecipes(relevant);
+    renderDiscoveredRecipes(selected);
+    if(relevant.length)out.insertAdjacentHTML('afterbegin','<p class="text-xs text-slate-500">'+selected.length+' von '+relevant.length+' passenden Rezepten – zuerst nach Suchzutaten, dann Vorrat'+(highProteinIntent?' und Eiweißgehalt':'')+' sortiert. Nährwerte sind Schätzungen aus der eingebauten Lebensmitteldatenbank.</p>');
   }catch(e){
     console.error(e);
     out.innerHTML='<p class="text-xs text-rose-600">Die Rezeptsuche ist gerade nicht erreichbar. Bitte später erneut versuchen.</p>';
   }
 }
-
 function renderRecipes() {
   const q = (document.getElementById('recipe-search-input').value || '').trim().toLowerCase();
   const list = state.recipes.filter(r => {
